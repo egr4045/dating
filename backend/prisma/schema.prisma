@@ -1,0 +1,22 @@
+// backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Наша первая таблица
+model User {
+  id          Int      @id @default(autoincrement())
+  telegramId  String   @unique // ID в телеграме бывают очень длинными, лучше хранить как строку
+  username    String?  // Никнейм может быть скрыт юзером в настройках ТГ
+  firstName   String   // Имя есть всегда
+  avatarUrl   String?  // Ссылка на аватарку
+  reputation  Float    @default(5.0) // Тот самый социальный рейтинг, по умолчанию 5.0
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
