@@ -1,65 +1,90 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
-import * as crypto from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
+import { Telegraf, Markup } from 'telegraf';
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
+  private bot: Telegraf;
+  // Временное хранилище в памяти: token -> { status, jwt, user }
+  private loginSessions = new Map<string, any>();
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
   ) {}
 
-  async validateTelegramData(telegramData: any) {
+  onModuleInit() {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) throw new Error('TELEGRAM_BOT_TOKEN не задан в .env');
 
-    // Отделяем хэш от остальных данных
-    const { hash, ...data } = telegramData;
+    this.bot = new Telegraf(botToken);
 
-    // 1. Формируем строку по правилам Telegram (сортируем ключи по алфавиту)
-    const dataCheckString = Object.keys(data)
-      .sort()
-      .map((key) => `${key}=${data[key]}`)
-      .join('\n');
+    // Слушаем переход по диплинку: t.me/bot?start=12345
+    this.bot.start(async (ctx) => {
+      const payload = ctx.message.text.split(' ')[1]; // Достаем код после /start
 
-    // 2. Создаем секретный ключ из токена бота
-    const secretKey = crypto.createHash('sha256').update(botToken).digest();
+      if (payload && this.loginSessions.has(payload)) {
+        const tgUser = ctx.from;
+        
+        // 1. Ищем или создаем юзера
+        let user = await this.prisma.user.findUnique({
+          where: { telegramId: tgUser.id.toString() },
+        });
 
-    // 3. Хэшируем данные и сравниваем с подписью от Telegram
-    const hmac = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+        if (!user) {
+          user = await this.prisma.user.create({
+            data: {
+              telegramId: tgUser.id.toString(),
+              firstName: tgUser.first_name,
+              username: tgUser.username,
+            },
+          });
+        }
 
-    if (hmac !== hash) {
-      throw new UnauthorizedException('Неверная подпись Telegram. Данные скомпрометированы.');
-    }
+        // 2. Генерируем цифровой пропуск (JWT)
+        const jwt = this.jwtService.sign({ sub: user.id, telegramId: user.telegramId });
+        
+        // 3. Обновляем статус сессии, чтобы фронтенд мог её забрать
+        this.loginSessions.set(payload, { status: 'authenticated', jwt, user });
 
-    // Если всё честно — логиним или регистрируем юзера
-    return this.loginUser(data);
-  }
-
-  private async loginUser(data: any) {
-    // Ищем юзера по telegramId в базе
-    let user = await this.prisma.user.findUnique({
-      where: { telegramId: data.id.toString() },
+        await ctx.reply(
+            `Привет, ${user.firstName}! Ты успешно вошел.`,
+            Markup.inlineKeyboard([
+                Markup.button.url('Вернуться на сайт 🚀', 'http://127.0.0.1')
+            ])
+            );
+      } else {
+        ctx.reply('Привет! Я бот Party Finder. Чтобы войти на сайт, нажми кнопку логина там.');
+      }
     });
 
-    // Если такого нет — это новая регистрация, создаем запись
-    if (!user) {
-      user = await this.prisma.user.create({
-        data: {
-          telegramId: data.id.toString(),
-          firstName: data.first_name,
-          username: data.username,
-          avatarUrl: data.photo_url,
-        },
-      });
-    }
+    this.bot.launch();
+    console.log('🤖 Telegram Бот запущен и слушает команды!');
+  }
 
-    // Генерируем цифровой пропуск (JWT)
-    const payload = { sub: user.id, telegramId: user.telegramId };
-    return {
-      access_token: this.jwtService.sign(payload),
-      user,
-    };
+  // Генерация уникального кода для фронтенда
+  generateLoginCode() {
+    const token = uuidv4();
+    this.loginSessions.set(token, { status: 'pending' });
+    
+    // Удаляем код через 5 минут, чтобы не засорять память
+    setTimeout(() => this.loginSessions.delete(token), 5 * 60 * 1000);
+    
+    return { token };
+  }
+
+  // Фронтенд будет стучаться сюда каждую секунду и спрашивать "Ну что?"
+  checkStatus(token: string) {
+    const session = this.loginSessions.get(token);
+    if (!session) return { status: 'expired' };
+    
+    if (session.status === 'authenticated') {
+      this.loginSessions.delete(token); // Одноразовый код отдаем только один раз
+      return session;
+    }
+    
+    return { status: 'pending' };
   }
 }
