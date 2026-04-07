@@ -11,21 +11,27 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(private prisma: PrismaService, private jwtService: JwtService) {}
 
   async handleConnection(client: Socket) {
+    console.log(`[Socket] Попытка подключения: ${client.id}`);
     try {
       const token = client.handshake.auth?.token;
       if (!token) {
+        console.warn(`[Socket] ${client.id}: Нет токена`);
         client.disconnect();
         return;
       }
       const payload = await this.jwtService.verifyAsync(token, { secret: process.env.JWT_SECRET || 'SUPER_SECRET_KEY' });
       client.data.userId = payload.sub;
       client.join(`user_${payload.sub}`);
+      console.log(`[Socket] ${client.id}: Успешная авторизация (User ID: ${payload.sub})`);
     } catch (e) {
+      console.error(`[Socket] ${client.id}: Ошибка JWT:`, e.message);
       client.disconnect();
     }
   }
 
-  handleDisconnect(client: Socket) {}
+  handleDisconnect(client: Socket) {
+    console.log(`[Socket] Отключился клиент: ${client.id}`);
+  }
 
   @SubscribeMessage('joinRoom')
   async handleJoinRoom(@ConnectedSocket() client: Socket, @MessageBody() matchId: number) {
