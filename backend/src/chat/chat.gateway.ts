@@ -3,7 +3,10 @@ import { Server, Socket } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 
-@WebSocketGateway({ cors: { origin: process.env.FRONTEND_URL || '*' } })
+@WebSocketGateway({ 
+  path: '/api-socket',
+  cors: { origin: process.env.FRONTEND_URL || '*' } 
+})
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;

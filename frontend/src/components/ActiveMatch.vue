@@ -132,7 +132,8 @@ const loadMatch = async () => {
     startTimer();
     scrollToBottom();
 
-    socket = io(API_URL, {
+    socket = io(window.location.origin, {
+      path: '/api-socket',
       auth: { token }
     });
     socket.emit('joinRoom', match.value.id);
