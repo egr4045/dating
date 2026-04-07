@@ -1,0 +1,82 @@
+[
+  {
+    "id": "food-oversize",
+    "title": "Oversize Pizza: Огромный слайс",
+    "description": "Идем в Oversize (Гражданская, 13). Заказываем ОДИН гигантский слайс пиццы на двоих. Напитки каждый себе сам. Ожидание: 20-30 минут сочного жира и хороших фото.",
+    "category": "food",
+    "subcategory": "pizza",
+    "imageUrl": "https://images.unsplash.com/photo-1513104890138-7c749659a591"
+  },
+  {
+    "id": "food-camorra",
+    "title": "Camorra: Козий сыр и груша",
+    "description": "Адрес: Казанская, 7. Берем авторскую крафтовую пиццу с грушей и сыром. Бюджет: около 800-900 руб/чел с напитком. Атмосфера: уютный дворик и неформальное общение.",
+    "category": "food",
+    "subcategory": "pizza",
+    "imageUrl": "https://images.unsplash.com/photo-1541745537411-b104a744b6fc"
+  },
+  {
+    "id": "food-character-filter",
+    "title": "Характер Кофе: Только фильтр",
+    "description": "Локация: Наб. Фонтанки, 109. Заказываем ТОЛЬКО фильтр-кофе (никаких латте). Идеально для серьезного разговора без ноутбуков. Ожидание: 30 минут спокойствия.",
+    "category": "food",
+    "subcategory": "coffee",
+    "imageUrl": "https://images.unsplash.com/photo-1509042239860-f550ce710b93"
+  },
+  {
+    "id": "food-coffee3-view",
+    "title": "Coffee 3: Вид и Коль",
+    "description": "Аптекарский пр., 4. Просторное место с видом. Обязательно пробуем фирменный коль. Ожидание: 40-50 минут общения на втором этаже.",
+    "category": "food",
+    "subcategory": "coffee",
+    "imageUrl": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085"
+  },
+  {
+    "id": "food-bolshe-grot",
+    "title": "Больше Кофе в Гроте",
+    "description": "Александровский парк. Самое маленькое и аутентичное кафе в гроте. Берем капучино, гуляем по парку дальше. Ожидание: 15 минут внутри, потом прогулка.",
+    "category": "food",
+    "subcategory": "coffee",
+    "imageUrl": "https://images.unsplash.com/photo-1507133750040-4a8f5704049d"
+  },
+  {
+    "id": "food-tiger-lily",
+    "title": "Tiger Lily: Секретная Китайка",
+    "description": "Вход через цветочный магазин на Итальянской. Берем свинину в кисло-сладком соусе. Бюджет: ~1200 руб/чел. Ожидание: стильный интерьер и много еды.",
+    "category": "food",
+    "subcategory": "dinner",
+    "imageUrl": "https://images.unsplash.com/photo-1512621776951-a57141f2eefd"
+  },
+  {
+    "id": "food-copitas-bar",
+    "title": "El Copitas: Секретный бар",
+    "description": "Один из лучших баров мира. Записываемся заранее. Коктейли и тако. Бюджет: ~1500 руб/чел. Задача: попробовать фирменную Маргариту.",
+    "category": "food",
+    "subcategory": "drinks",
+    "imageUrl": "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b"
+  },
+  {
+    "id": "food-jungle-roof",
+    "title": "Jungle: Тропики в центре",
+    "description": "Канал Грибоедова, 18-20. Завтрак или ужин среди зелени под куполом. Ожидание: красиво, дорого, инстаграмно. Бюджет: 1500+ руб/чел.",
+    "category": "food",
+    "subcategory": "restaurant",
+    "imageUrl": "https://images.unsplash.com/photo-1504674900247-0877df9cc836"
+  },
+  {
+    "id": "food-subzero",
+    "title": "Subzero: Огромные роллы",
+    "description": "Рубинштейна или Петроградка. Берем роллы-сет с огромным количеством зелени сверху. Очень сытно. Ожидание: обсуждение лучшей японской кухни в городе.",
+    "category": "food",
+    "subcategory": "sushi",
+    "imageUrl": "https://images.unsplash.com/photo-1579871494447-9811cf80d66c"
+  },
+  {
+    "id": "food-teremok",
+    "title": "Теремок: Илья Муромец",
+    "description": "Ироничный поход за лучшими блинами. Берем блин 'Илья Муромец' и квас. Бюджет: 600 руб. Ожидание: быстро, вкусно, по-русски.",
+    "category": "food",
+    "subcategory": "fastfood",
+    "imageUrl": "https://images.unsplash.com/photo-1528733918455-5a59687cedf0"
+  }
+]
