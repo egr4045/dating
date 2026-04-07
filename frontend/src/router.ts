@@ -3,6 +3,7 @@ import TelegramLogin from './components/TelegramLogin.vue';
 import Onboarding from './components/Onboarding.vue';
 import Dashboard from './components/Dashboard.vue';
 import ActiveMatch from './components/ActiveMatch.vue';
+import { API_URL } from './config';
 
 const routes = [
   { path: '/', component: TelegramLogin },
@@ -33,7 +34,10 @@ router.beforeEach(async (to, _from, next) => {
   // 3. Пункт 4 из твоего списка: Защита Дашборда от тех, у кого активен квест
   if (userId && to.path === '/dashboard') {
     try {
-      const res = await fetch(`http://localhost:3000/quests/active?userId=${userId}`);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/quests/active`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       const data = await res.json();
       
       if (data.hasActiveMatch) {

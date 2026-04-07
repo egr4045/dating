@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatGateway } from '../chat/chat.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class QuestsService {
@@ -43,14 +44,17 @@ export class QuestsService {
       if (!(aHasWait && aIsPref) && (bHasWait && bIsPref)) return 1;
       if ((!aHasWait && aIsPref) && !(!bHasWait && bIsPref)) return -1;
       if (!(!aHasWait && aIsPref) && (!bHasWait && bIsPref)) return 1;
-      if ((aHasWait && !aIsPref) && !(bHasWait && !bIsPref)) return -1;
       if (!(aHasWait && !aIsPref) && (bHasWait && !bIsPref)) return 1;
       return 0;
-    });
+    }).slice(0, 20);
   }
 
   async handleSwipe(userId: number, questId: string, action: 'like' | 'dislike') {
     if (action === 'dislike') return { status: 'ignored' };
+
+    // Проверяем, существует ли шаблон вообще
+    const template = await this.prisma.questTemplate.findUnique({ where: { id: questId } });
+    if (!template) return { status: 'error', message: 'Quest template not found' };
 
     // ЗАЩИТА: Проверяем, нет ли у юзера уже активного мэтча
     const activeMatch = await this.prisma.questLobby.findFirst({
@@ -76,12 +80,27 @@ export class QuestsService {
     });
 
     if (existingLobby) {
-      // 1. Создаем мэтч
-      const match = await this.prisma.questLobby.update({
-        where: { id: existingLobby.id },
+      // 1. Атомарное обновление для предотвращения Race Condition
+      const updateResult = await this.prisma.questLobby.updateMany({
+        where: { id: existingLobby.id, status: 'WAITING' },
         data: { participantId: userId, status: 'MATCHED' },
+      });
+
+      if (updateResult.count === 0) {
+        // Кто-то другой успел свайпнуть эту заявку первее, создаем свою
+         await this.prisma.questLobby.create({
+          data: { templateId: questId, hostId: userId, status: 'WAITING' },
+        });
+        return { status: 'waiting' };
+      }
+
+      // Получаем обновленный мэтч
+      const match = await this.prisma.questLobby.findUnique({
+        where: { id: existingLobby.id },
         include: { host: true, template: true }
       });
+
+      if (!match) return { status: 'ignored' }; // Fallback
 
       // 2. Отменяем старые лайки
       await this.prisma.questLobby.updateMany({
@@ -144,9 +163,32 @@ export class QuestsService {
   }
 
   async updateMatchStatus(matchId: number, status: 'COMPLETED' | 'FAILED') {
+    const match = await this.prisma.questLobby.findUnique({ where: { id: matchId } });
+    if (!match) return null;
+
     return this.prisma.questLobby.update({
       where: { id: matchId },
       data: { status }
     });
+  }
+
+
+  // Запускается раз в 5 минут
+  @Cron(CronExpression.EVERY_5_MINUTES)
+  async cleanupStaleLobbies() {
+    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
+    const result = await this.prisma.questLobby.updateMany({
+      where: {
+        status: 'WAITING',
+        createdAt: { lt: fifteenMinsAgo }
+      },
+      data: {
+        status: 'EXPIRED'
+      }
+    });
+
+    if (result.count > 0) {
+      console.log(`[Cron] Cleared ${result.count} stale lobbies.`);
+    }
   }
 }

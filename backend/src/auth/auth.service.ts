@@ -49,12 +49,13 @@ export class AuthService implements OnModuleInit {
         // 3. Обновляем статус сессии, чтобы фронтенд мог её забрать
         this.loginSessions.set(payload, { status: 'authenticated', jwt, user });
 
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
         await ctx.reply(
             `Привет, ${user.firstName}! Ты успешно вошел.`,
             Markup.inlineKeyboard([
-                Markup.button.url('Вернуться на сайт 🚀', 'http://127.0.0.1')
+                Markup.button.url('Вернуться на сайт 🚀', frontendUrl)
             ])
-            );
+        );
       } else {
         ctx.reply('Привет! Я бот Party Finder. Чтобы войти на сайт, нажми кнопку логина там.');
       }

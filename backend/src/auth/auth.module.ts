@@ -7,7 +7,7 @@ import { AuthController } from './auth.controller';
 @Module({
   imports: [
     JwtModule.register({
-      secret: 'SUPER_SECRET_KEY', // В будущем вынесем это в .env для безопасности
+      secret: process.env.JWT_SECRET || 'SUPER_SECRET_KEY',
       signOptions: { expiresIn: '7d' }, // Токен будет жить 7 дней, потом юзеру надо будет перелогиниться
     }),
   ],

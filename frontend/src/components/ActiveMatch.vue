@@ -66,6 +66,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { io, Socket } from 'socket.io-client';
+import { API_URL } from '../config';
 
 const route = useRoute();
 const router = useRouter();
@@ -98,7 +99,7 @@ const scrollToBottom = async () => {
 const startTimer = () => {
   if (!match.value) return;
   const matchTime = new Date(match.value.createdAt).getTime();
-  const waitTime = 10 * 60 * 1000; // Для тестов можешь поменять на 10 * 1000 (10 секунд)
+  const waitTime = 15 * 60 * 1000; // 15 минут, как на бэкенде
 
   timerInterval = setInterval(() => {
     const diff = Date.now() - matchTime;
@@ -116,19 +117,24 @@ const startTimer = () => {
 // --- ФУНКЦИЯ ПРОЧТЕНИЯ (ЕДИНСТВЕННАЯ) ---
 const markAsRead = () => {
   if (socket && match.value) {
-    socket.emit('markAsRead', { matchId: match.value.id, userId: currentUserId });
+    socket.emit('markAsRead', { matchId: match.value.id });
   }
 };
 
 const loadMatch = async () => {
+  const token = localStorage.getItem('token');
   try {
-    const res = await fetch(`http://localhost:3000/quests/match/${route.params.id}`);
+    const res = await fetch(`${API_URL}/quests/match/${route.params.id}`, {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    });
     match.value = await res.json();
     messages.value = match.value.messages || [];
     startTimer();
     scrollToBottom();
 
-    socket = io('http://localhost:3000');
+    socket = io(API_URL, {
+      auth: { token }
+    });
     socket.emit('joinRoom', match.value.id);
     
     socket.on('newMessage', (msg) => {
@@ -147,7 +153,6 @@ const sendMessage = () => {
   if (!newMessage.value.trim() || !socket) return;
   socket.emit('sendMessage', {
     matchId: match.value.id,
-    senderId: currentUserId,
     text: newMessage.value.trim()
   });
   newMessage.value = '';
@@ -155,11 +160,15 @@ const sendMessage = () => {
 
 // Кнопки выхода
 const cancelMatch = async () => {
-  if (!canFinish.value) return;
+  const token = localStorage.getItem('token');
+  if (!canFinish.value || !token) return;
   try {
-    await fetch(`http://localhost:3000/quests/match/${match.value.id}/status`, {
+    await fetch(`${API_URL}/quests/match/${match.value.id}/status`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
       body: JSON.stringify({ status: 'FAILED' })
     });
     router.push('/dashboard');
@@ -169,11 +178,15 @@ const cancelMatch = async () => {
 };
 
 const finishMatch = async () => {
-  if (!canFinish.value) return;
+  const token = localStorage.getItem('token');
+  if (!canFinish.value || !token) return;
   try {
-    await fetch(`http://localhost:3000/quests/match/${match.value.id}/status`, {
+    await fetch(`${API_URL}/quests/match/${match.value.id}/status`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
       body: JSON.stringify({ status: 'COMPLETED' })
     });
     router.push('/dashboard');

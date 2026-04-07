@@ -46,6 +46,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { API_URL } from '../config';
 
 const router = useRouter(); // Инициализируем роутер для переходов
 const loginToken = ref('');
@@ -58,7 +59,7 @@ const getCode = async () => {
   status.value = 'pending';
   loginToken.value = '';
   try {
-    const res = await fetch('http://localhost:3000/auth/generate');
+    const res = await fetch(`${API_URL}/auth/generate`);
     const data = await res.json();
     loginToken.value = data.token;
     startPolling();
@@ -73,7 +74,7 @@ const startPolling = () => {
   
   pollInterval = setInterval(async () => {
     try {
-      const res = await fetch(`http://localhost:3000/auth/status?token=${loginToken.value}`);
+      const res = await fetch(`${API_URL}/auth/status?token=${loginToken.value}`);
       const data = await res.json();
 
       if (data.status === 'authenticated') {
@@ -106,7 +107,7 @@ const testName = ref('');
 const handleTestLogin = async () => {
   if (!testName.value) return;
   try {
-    const res = await fetch('http://localhost:3000/users/test-login', {
+    const res = await fetch(`${API_URL}/users/test-login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: testName.value })

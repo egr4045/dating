@@ -29,6 +29,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { io, Socket } from 'socket.io-client';
 import QuestCard from './QuestCard.vue';
+import { API_URL } from '../config';
 
 // 1. Сначала инициализируем роутер
 const router = useRouter();
@@ -53,13 +54,15 @@ const logout = () => {
 };
 
 const loadQuests = async () => {
-  const userId = localStorage.getItem('userId');
-  if (!userId) return;
+  const token = localStorage.getItem('token');
+  if (!token) return;
 
   try {
-    const res = await fetch(`http://localhost:3000/quests/feed?userId=${userId}`);
+    const res = await fetch(`${API_URL}/quests/feed`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
     const data = await res.json();
-    quests.value = data;
+    quests.value = data.reverse();
   } catch (e) {
     console.error('Ошибка загрузки:', e);
   }
@@ -67,14 +70,17 @@ const loadQuests = async () => {
 
 // 4. Логика свайпов
 const onLike = async (questId: string) => {
-  const userId = localStorage.getItem('userId');
-  if (!userId) return;
+  const token = localStorage.getItem('token');
+  if (!token) return;
 
   try {
-    const res = await fetch('http://localhost:3000/quests/swipe', {
+    const res = await fetch(`${API_URL}/quests/swipe`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: parseInt(userId), questId, action: 'like' }),
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ questId, action: 'like' }),
     });
     const result = await res.json();
 
@@ -92,13 +98,16 @@ const onLike = async (questId: string) => {
 };
 
 const onNope = async (questId: string) => {
-  const userId = localStorage.getItem('userId');
-  if (!userId) return;
+  const token = localStorage.getItem('token');
+  if (!token) return;
 
-  fetch('http://localhost:3000/quests/swipe', {
+  fetch(`${API_URL}/quests/swipe`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId: parseInt(userId), questId, action: 'dislike' }),
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ questId, action: 'dislike' }),
   });
   
   setTimeout(() => quests.value.pop(), 300);
@@ -106,13 +115,13 @@ const onNope = async (questId: string) => {
 
 // 5. Логика WebSockets
 const connectToSocket = () => {
-  const userId = localStorage.getItem('userId');
-  if (!userId) return;
+  const token = localStorage.getItem('token');
+  if (!token) return;
 
-  socket = io('http://localhost:3000');
+  socket = io(API_URL, {
+    auth: { token }
+  });
   
-  socket.emit('joinUserRoom', parseInt(userId));
-
   socket.on('matchFound', (matchId) => {
     // Прилетел пуш с сервера — мгновенно летим в комнату!
     router.push(`/match/${matchId}`);

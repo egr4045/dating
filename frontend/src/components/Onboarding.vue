@@ -60,6 +60,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { API_URL } from '../config';
 
 const currentStep = ref(1);
 const selectedGroups = ref<string[]>([]);
@@ -120,20 +121,21 @@ const handleNext = async () => {
   if (currentStep.value === 1) {
     currentStep.value = 2;
   } else {
-    const userId = localStorage.getItem('userId');
-    
-    if (!userId) {
-      alert('Ошибка: пользователь не найден. Попробуйте войти снова.');
+    const token = localStorage.getItem('token');
+    if (!token) {
+      alert('Ошибка: сессия не найдена.');
       router.push('/');
       return;
     }
 
     try {
-      const res = await fetch('http://localhost:3000/users/interests', {
+      const res = await fetch(`${API_URL}/users/interests`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ 
-          userId: parseInt(userId), 
           interests: selectedInterests.value 
         }),
       });

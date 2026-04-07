@@ -1,31 +1,49 @@
-import { WebSocketGateway, SubscribeMessage, MessageBody, ConnectedSocket, WebSocketServer } from '@nestjs/websockets';
+import { WebSocketGateway, SubscribeMessage, MessageBody, ConnectedSocket, WebSocketServer, OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service';
+import { JwtService } from '@nestjs/jwt';
 
-@WebSocketGateway({ cors: { origin: '*' } })
-export class ChatGateway {
+@WebSocketGateway({ cors: { origin: process.env.FRONTEND_URL || '*' } })
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private jwtService: JwtService) {}
 
-  @SubscribeMessage('joinUserRoom')
-  handleJoinUserRoom(@ConnectedSocket() client: Socket, @MessageBody() userId: number) {
-    client.join(`user_${userId}`);
+  async handleConnection(client: Socket) {
+    try {
+      const token = client.handshake.auth?.token;
+      if (!token) {
+        client.disconnect();
+        return;
+      }
+      const payload = await this.jwtService.verifyAsync(token, { secret: process.env.JWT_SECRET || 'SUPER_SECRET_KEY' });
+      client.data.userId = payload.sub;
+      client.join(`user_${payload.sub}`);
+    } catch (e) {
+      client.disconnect();
+    }
   }
 
+  handleDisconnect(client: Socket) {}
+
   @SubscribeMessage('joinRoom')
-  handleJoinRoom(@ConnectedSocket() client: Socket, @MessageBody() matchId: number) {
-    client.join(`match_${matchId}`);
+  async handleJoinRoom(@ConnectedSocket() client: Socket, @MessageBody() matchId: number) {
+    const userId = client.data.userId;
+    const lobby = await this.prisma.questLobby.findUnique({ where: { id: matchId } });
+    if (lobby && (lobby.hostId === userId || lobby.participantId === userId)) {
+      client.join(`match_${matchId}`);
+    }
   }
 
   // ФРОНТ СООБЩАЕТ: "Я ПРОЧИТАЛ"
   @SubscribeMessage('markAsRead')
-  async handleMarkAsRead(@MessageBody() data: { matchId: number, userId: number }) {
+  async handleMarkAsRead(@ConnectedSocket() client: Socket, @MessageBody() data: { matchId: number }) {
+    const userId = client.data.userId;
     const lobby = await this.prisma.questLobby.findUnique({ where: { id: data.matchId } });
-    if (!lobby) return;
+    if (!lobby || (lobby.hostId !== userId && lobby.participantId !== userId)) return;
 
-    if (lobby.hostId === data.userId) {
+    if (lobby.hostId === userId) {
       await this.prisma.questLobby.update({ where: { id: data.matchId }, data: { hostLastReadAt: new Date() } });
     } else {
       await this.prisma.questLobby.update({ where: { id: data.matchId }, data: { participantLastReadAt: new Date() } });
@@ -34,25 +52,26 @@ export class ChatGateway {
 
   // ОТПРАВКА СООБЩЕНИЯ
   @SubscribeMessage('sendMessage')
-  async handleMessage(@MessageBody() data: { matchId: number, senderId: number, text: string }) {
+  async handleMessage(@ConnectedSocket() client: Socket, @MessageBody() data: { matchId: number, text: string }) {
+    const senderId = client.data.userId;
+    const lobby = await this.prisma.questLobby.findUnique({ where: { id: data.matchId } });
+    if (!lobby || (lobby.hostId !== senderId && lobby.participantId !== senderId)) return;
+
     const message = await this.prisma.message.create({
-      data: { matchId: data.matchId, senderId: data.senderId, text: data.text }
+      data: { matchId: data.matchId, senderId, text: data.text }
     });
 
-    const lobby = await this.prisma.questLobby.findUnique({ where: { id: data.matchId } });
-    if (lobby) {
-      const isHost = lobby.hostId === data.senderId;
-      await this.prisma.questLobby.update({
-        where: { id: data.matchId },
-        data: {
-          lastMessageAt: new Date(),
-          hostLastReadAt: isHost ? new Date() : undefined,
-          participantLastReadAt: !isHost ? new Date() : undefined,
-        }
-      });
-    }
+    const isHost = lobby.hostId === senderId;
+    await this.prisma.questLobby.update({
+      where: { id: data.matchId },
+      data: {
+        lastMessageAt: new Date(),
+        hostLastReadAt: isHost ? new Date() : undefined,
+        participantLastReadAt: !isHost ? new Date() : undefined,
+      }
+    });
 
     this.server.to(`match_${data.matchId}`).emit('newMessage', message);
     return message;
   }
-}
+}
