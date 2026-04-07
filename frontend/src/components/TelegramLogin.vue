@@ -112,11 +112,18 @@ const handleTestLogin = async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: testName.value })
     });
-    const user = await res.json();
+    const data = await res.json();
     
-    // Сохраняем ID и пускаем сразу в дашборд
-    localStorage.setItem('userId', user.id);
-    router.push('/dashboard'); 
+    // Сохраняем ID и токен
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('userId', data.user.id);
+    
+    // Если интересов нет — на анбординг, если есть — в дашборд
+    if (!data.user.interests || data.user.interests.length === 0) {
+      router.push('/onboarding');
+    } else {
+      router.push('/dashboard');
+    }
   } catch (e) {
     console.error('Ошибка dev-логина:', e);
   }

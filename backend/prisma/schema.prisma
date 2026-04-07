@@ -18,8 +18,10 @@ model User {
   avatarUrl   String?
   reputation  Float    @default(5.0)
   interests   String[]
+  bannedUntil DateTime?  // Если задано и в будущем — юзер забанен
   hostedLobbies   QuestLobby[]  @relation("Host")
   joinedLobbies   QuestLobby[]  @relation("Participant")
+  timeSlots       TimeSlot[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -44,7 +46,11 @@ model QuestLobby {
   participant           User?         @relation("Participant", fields: [participantId], references: [id])
   status                String        @default("WAITING")
   
-  // НОВЫЕ ПОЛЯ ДЛЯ ЧАТА И ПУШЕЙ
+  // Поля для времени встречи
+  scheduledAt           DateTime?     // Зафиксированное время встречи после выбора слота
+  hostSlots             Json?         // Снимок слотов хоста на момент создания лобби
+  
+  // Поля для чата и пушей
   lastMessageAt         DateTime?     // Время последнего сообщения
   hostLastReadAt        DateTime      @default(now()) // Когда хост читал чат
   participantLastReadAt DateTime      @default(now()) // Когда напарник читал
@@ -62,4 +68,14 @@ model Message {
   text      String
   createdAt DateTime   @default(now())
   match     QuestLobby @relation(fields: [matchId], references: [id]) // Связь с лобби
+}
+
+model TimeSlot {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  dayOfWeek Int      // 0=Пн, 1=Вт, ... 6=Вс
+  timeFrom  String   // "19:00"
+  timeTo    String   // "22:00"
+  createdAt DateTime @default(now())
 }

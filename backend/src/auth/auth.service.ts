@@ -49,9 +49,10 @@ export class AuthService implements OnModuleInit {
         // 3. Обновляем статус сессии, чтобы фронтенд мог её забрать
         this.loginSessions.set(payload, { status: 'authenticated', jwt, user });
 
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const frontendUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:4173';
+        
         await ctx.reply(
-            `Привет, ${user.firstName}! Ты успешно вошел.`,
+            `Привет, ${user.firstName}! Ты успешно вошел.\n\nНажми кнопку ниже или перейди по ссылке:\n${frontendUrl}`,
             Markup.inlineKeyboard([
                 Markup.button.url('Вернуться на сайт 🚀', frontendUrl)
             ])

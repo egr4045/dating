@@ -5,8 +5,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ChatModule } from '../chat/chat.module';
 import { NotificationsModule } from '../notifications/notifications.module'; // <-- 1. Импортируем
 
+import { AuthModule } from '../auth/auth.module';
+
 @Module({
-  imports: [ChatModule, NotificationsModule], // <-- 2. Добавляем в массив
+  imports: [AuthModule, ChatModule, NotificationsModule], // <-- 2. Добавляем в массив
   controllers: [QuestsController],
   providers: [QuestsService, PrismaService],
 })

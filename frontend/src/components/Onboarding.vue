@@ -2,6 +2,39 @@
   <div class="onboarding-container">
     <div class="glass-card">
       
+      <!-- ШАГ 0: Обучающий экран -->
+      <div v-if="currentStep === 0" class="step-fade">
+        <div class="welcome-icon">🎯</div>
+        <h1 class="huge-title">Добро пожаловать в&nbsp;Quests!</h1>
+        <p class="welcome-lead">Это не знакомства. Это поиск приятеля на конкретное занятие.</p>
+        
+        <div class="rules-list">
+          <div class="rule-item">
+            <span class="rule-emoji">1️⃣</span>
+            <p>Ты выбираешь интересы и время, когда свободен.</p>
+          </div>
+          <div class="rule-item">
+            <span class="rule-emoji">2️⃣</span>
+            <p>Мы находим тебе напарника, который хочет того же.</p>
+          </div>
+          <div class="rule-item">
+            <span class="rule-emoji">3️⃣</span>
+            <p>Встреча состоялась? Отметь «Всё супер!» — и репутация растёт.</p>
+          </div>
+        </div>
+
+        <div class="warning-block">
+          <h4>⚠️ Важно — правила платформы:</h4>
+          <ul>
+            <li>Одновременно может быть только <strong>один активный метч</strong> — чтобы не подводить людей.</li>
+            <li>Если ты пропустил встречу без отмены — <strong>репутация упадёт</strong>.</li>
+            <li>Репутация ниже 2.0 → <strong>бан на 30 дней</strong>. Мы относимся к чужому времени серьёзно.</li>
+          </ul>
+          <p class="warning-note">Это не страшно — просто будь честным. Если не можешь — отмени заранее.</p>
+        </div>
+      </div>
+
+      <!-- ШАГ 1: Выбор категорий -->
       <div v-if="currentStep === 1" class="step-fade">
         <h1 class="huge-title">С чего начнем?</h1>
         <p class="subtitle">Выбери основные направления (можно несколько)</p>
@@ -20,6 +53,7 @@
         </div>
       </div>
 
+      <!-- ШАГ 2: Детали интересов -->
       <div v-if="currentStep === 2" class="step-fade">
         <h1 class="huge-title">Уточним детали</h1>
         <p class="subtitle">Что именно тебя интересует в этих сферах?</p>
@@ -41,8 +75,16 @@
         </div>
       </div>
 
+      <!-- ШАГ 3: Выбор времени -->
+      <div v-if="currentStep === 3" class="step-fade">
+        <h1 class="huge-title">Когда ты свободен?</h1>
+        <p class="subtitle">Укажи дни и время — мы будем искать напарников под твоё расписание</p>
+        
+        <SlotPicker v-model="timeSlots" title="" />
+      </div>
+
       <footer class="onboarding-footer">
-        <button v-if="currentStep === 2" class="secondary-btn" @click="currentStep = 1">
+        <button v-if="currentStep > 0" class="secondary-btn" @click="currentStep--">
           Назад
         </button>
         <button 
@@ -50,7 +92,7 @@
           :disabled="isNextDisabled"
           @click="handleNext"
         >
-          {{ currentStep === 1 ? 'Далее' : 'Готово' }}
+          {{ stepButtonLabel }}
         </button>
       </footer>
     </div>
@@ -61,10 +103,12 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { API_URL } from '../config';
+import SlotPicker from './SlotPicker.vue';
 
-const currentStep = ref(1);
+const currentStep = ref(0);
 const selectedGroups = ref<string[]>([]);
 const selectedInterests = ref<string[]>([]);
+const timeSlots = ref<{ dayOfWeek: number; timeFrom: string; timeTo: string }[]>([]);
 const router = useRouter();
 
 const categories: any = {
@@ -113,44 +157,56 @@ const toggleInterest = (id: string) => {
 };
 
 const isNextDisabled = computed(() => {
+  if (currentStep.value === 0) return false;
   if (currentStep.value === 1) return selectedGroups.value.length === 0;
-  return selectedInterests.value.length < 2;
+  if (currentStep.value === 2) return selectedInterests.value.length < 2;
+  if (currentStep.value === 3) return timeSlots.value.length === 0;
+  return false;
+});
+
+const stepButtonLabel = computed(() => {
+  if (currentStep.value === 0) return 'Понятно, поехали! 🚀';
+  if (currentStep.value === 3) return 'Готово';
+  return 'Далее';
 });
 
 const handleNext = async () => {
-  if (currentStep.value === 1) {
-    currentStep.value = 2;
-  } else {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      alert('Ошибка: сессия не найдена.');
-      router.push('/');
-      return;
-    }
+  if (currentStep.value < 3) {
+    currentStep.value++;
+    return;
+  }
 
-    try {
-      const res = await fetch(`${API_URL}/users/interests`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ 
-          interests: selectedInterests.value 
-        }),
-      });
+  // Финальный шаг — сохраняем всё
+  const token = localStorage.getItem('token');
+  if (!token) {
+    alert('Ошибка: сессия не найдена.');
+    router.push('/');
+    return;
+  }
 
-      if (res.ok) {
-        // После успеха отправляем пользователя на главный экран приложения
-        // Пока его нет, создадим пустую заглушку /dashboard
-        router.push('/dashboard'); 
-      } else {
-        alert('Не удалось сохранить интересы. Попробуйте позже.');
-      }
-    } catch (e) {
-      console.error('Ошибка при сохранении:', e);
-      alert('Проблема с соединением');
+  try {
+    // Сохраняем интересы
+    const resInterests = await fetch(`${API_URL}/users/interests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ interests: selectedInterests.value }),
+    });
+
+    // Сохраняем слоты
+    const resSlots = await fetch(`${API_URL}/users/slots`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ slots: timeSlots.value }),
+    });
+
+    if (resInterests.ok && resSlots.ok) {
+      router.push('/dashboard'); 
+    } else {
+      alert('Не удалось сохранить данные. Попробуйте позже.');
     }
+  } catch (e) {
+    console.error('Ошибка при сохранении:', e);
+    alert('Проблема с соединением');
   }
 };
 </script>
@@ -174,6 +230,71 @@ const handleNext = async () => {
   box-shadow: 0 30px 60px rgba(0,0,0,0.08);
 }
 
+/* Шаг 0: Добро пожаловать */
+.welcome-icon {
+  font-size: 56px;
+  margin-bottom: 16px;
+}
+.welcome-lead {
+  font-size: 18px;
+  color: #555;
+  margin-bottom: 32px;
+  line-height: 1.5;
+}
+
+.rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.rule-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #f8f9fc;
+  padding: 16px;
+  border-radius: 16px;
+}
+.rule-emoji {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.rule-item p {
+  margin: 0;
+  font-size: 15px;
+  color: #333;
+  line-height: 1.4;
+}
+
+.warning-block {
+  background: linear-gradient(135deg, #fff8e1, #fff3cd);
+  border-radius: 20px;
+  padding: 20px 24px;
+  border-left: 4px solid #ffb300;
+}
+.warning-block h4 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: #1d1d1f;
+}
+.warning-block ul {
+  margin: 0;
+  padding-left: 20px;
+}
+.warning-block li {
+  font-size: 14px;
+  color: #555;
+  line-height: 1.6;
+}
+.warning-note {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #888;
+  font-style: italic;
+}
+
+/* Общие стили заголовков */
 .huge-title { 
   font-size: 36px; 
   font-weight: 800; 
@@ -184,7 +305,7 @@ const handleNext = async () => {
 
 .subtitle { color: #86868b; font-size: 18px; margin-bottom: 40px; }
 
-/* Исправленная сетка: карточки больше не слипаются */
+/* Сетка категорий */
 .spotify-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -203,7 +324,6 @@ const handleNext = async () => {
   align-items: flex-end;
 }
 
-/* Анимация наведения */
 .spotify-card:hover {
   transform: translateY(-5px) scale(1.02);
   box-shadow: 0 15px 30px rgba(0,0,0,0.15);
@@ -261,12 +381,11 @@ const handleNext = async () => {
   gap: 16px;
 }
 
-/* Контрастная кнопка "Далее" */
 .primary-btn {
   flex: 2;
   padding: 20px;
   border-radius: 20px;
-  background: #4a6fff; /* Более насыщенный синий для контраста */
+  background: #4a6fff;
   color: white;
   border: none;
   font-weight: 800;
@@ -303,7 +422,6 @@ const handleNext = async () => {
 
 .secondary-btn:hover { background: #e5e5ea; }
 
-/* Плавное появление шагов */
 .step-fade {
   animation: fadeIn 0.4s ease-out;
 }

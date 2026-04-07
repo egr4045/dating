@@ -3,6 +3,8 @@ import TelegramLogin from './components/TelegramLogin.vue';
 import Onboarding from './components/Onboarding.vue';
 import Dashboard from './components/Dashboard.vue';
 import ActiveMatch from './components/ActiveMatch.vue';
+import Settings from './components/Settings.vue';
+import History from './components/History.vue';
 import { API_URL } from './config';
 
 const routes = [
@@ -10,6 +12,8 @@ const routes = [
   { path: '/onboarding', component: Onboarding },
   { path: '/dashboard', component: Dashboard },
   { path: '/match/:id', component: ActiveMatch },
+  { path: '/settings', component: Settings },
+  { path: '/history', component: History },
 ];
 
 export const router = createRouter({

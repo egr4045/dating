@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService
+  ) {}
 
   async updateInterests(userId: number, interests: string[]) {
     return this.prisma.user.update({
@@ -11,6 +15,35 @@ export class UsersService {
       data: { interests },
     });
   }
+
+  async updateSlots(userId: number, slots: { dayOfWeek: number; timeFrom: string; timeTo: string }[]) {
+    // Удаляем старые слоты
+    await this.prisma.timeSlot.deleteMany({ where: { userId } });
+    // Создаём новые
+    await this.prisma.timeSlot.createMany({
+      data: slots.map(s => ({ userId, dayOfWeek: s.dayOfWeek, timeFrom: s.timeFrom, timeTo: s.timeTo })),
+    });
+    return { success: true };
+  }
+
+  async getProfile(userId: number) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        firstName: true,
+        username: true,
+        reputation: true,
+        interests: true,
+        bannedUntil: true,
+        timeSlots: {
+          select: { id: true, dayOfWeek: true, timeFrom: true, timeTo: true },
+          orderBy: { dayOfWeek: 'asc' },
+        },
+      },
+    });
+  }
+
 
   async testLogin(name: string) {
     // Ищем тестового юзера с таким именем
@@ -28,6 +61,10 @@ export class UsersService {
         }
       });
     }
-    return user;
+
+    // Генерируем токен для тестового юзера
+    const token = this.jwtService.sign({ sub: user.id, telegramId: user.telegramId });
+
+    return { user, token };
   }
 }
