@@ -213,7 +213,7 @@ onUnmounted(() => { socket?.disconnect(); });
 </script>
 
 <style scoped>
-.dashboard { overflow: hidden; }
+.dashboard { overflow-x: hidden; }
 
 .cards-area {
   flex: 1;

@@ -238,6 +238,7 @@ p  { color: var(--text-muted); }
   display: flex;
   flex-direction: column;
   background: var(--bg);
+  overflow-y: auto;
 }
 .page-content {
   flex: 1;

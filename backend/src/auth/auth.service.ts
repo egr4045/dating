@@ -17,7 +17,10 @@ export class AuthService implements OnModuleInit {
 
   onModuleInit() {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (!botToken) throw new Error('TELEGRAM_BOT_TOKEN не задан в .env');
+    if (!botToken) {
+      console.warn('⚠️  TELEGRAM_BOT_TOKEN не задан — Telegram бот отключён.');
+      return;
+    }
 
     this.bot = new Telegraf(botToken);
 

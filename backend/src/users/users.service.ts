@@ -92,7 +92,7 @@ export class UsersService {
         data: {
           telegramId: `test-${Date.now()}`,
           firstName: name,
-          interests: ['mc', 'dota', 'movie_online', 'chatting'], 
+          interests: [], 
         }
       });
     }

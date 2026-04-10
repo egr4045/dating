@@ -5,7 +5,18 @@ import { JwtService } from '@nestjs/jwt';
 
 @WebSocketGateway({ 
   path: '/api-socket',
-  cors: { origin: process.env.FRONTEND_URL || '*' } 
+  cors: { 
+    origin: [
+      'http://localhost:5173',
+      'http://127.0.0.1',
+      'http://127.0.0.1:80',
+      'http://127.0.0.1:5173',
+      'http://localhost',
+      'http://localhost:80',
+      'http://localhost:3000',
+    ],
+    credentials: true
+  } 
 })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
