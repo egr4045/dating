@@ -84,29 +84,54 @@ export class QuestsService {
     });
 
     if (existingLobby) {
-      // ▶ НОВАЯ ЛОГИКА: Не матчим сразу — возвращаем слоты хоста для выбора
-      return {
-        status: 'slots_required',
-        lobbyId: existingLobby.id,
-        questId,
-        hostSlots: existingLobby.hostSlots || [],
-      };
+      // Прямой матч — оба лайкнули одно событие
+      const updateResult = await this.prisma.questLobby.updateMany({
+        where: { id: existingLobby.id, status: 'WAITING' },
+        data: { participantId: userId, status: 'MATCHED', schedulingStatus: 'PENDING' },
+      });
+
+      if (updateResult.count === 0) {
+        // Race condition — лобби уже занято, создаём своё
+        await this.prisma.questLobby.create({
+          data: { templateId: questId, hostId: userId, status: 'WAITING' },
+        });
+        return { status: 'waiting' };
+      }
+
+      const match = await this.prisma.questLobby.findUnique({
+        where: { id: existingLobby.id },
+        include: { host: true, participant: true, template: true }
+      });
+      if (!match) return { status: 'error' };
+
+      // Отменяем другие ожидания обоих
+      await this.prisma.questLobby.updateMany({
+        where: { status: 'WAITING', hostId: { in: [userId, match.hostId] } },
+        data: { status: 'CANCELLED' }
+      });
+
+      // Уведомляем обоих
+      this.chatGateway.server.to(`user_${match.hostId}`).emit('matchFound', match.id);
+      this.chatGateway.server.to(`user_${userId}`).emit('matchFound', match.id);
+
+      const participant = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (participant) {
+        this.notifications.sendTelegramPush(
+          match.host.telegramId,
+          `🎉 Мэтч! ${participant.firstName} тоже хочет "${match.template.title}". Выберите дату!`
+        );
+        this.notifications.sendTelegramPush(
+          participant.telegramId,
+          `🎉 Мэтч! ${match.host.firstName} тоже хочет "${match.template.title}". Выберите дату!`
+        );
+      }
+
+      return { status: 'matched', match };
     }
 
-    // Никого нет — создаем свое ожидание, сохраняем слоты хоста
-    const userSlots = await this.prisma.timeSlot.findMany({
-      where: { userId },
-      select: { dayOfWeek: true, timeFrom: true, timeTo: true },
-      orderBy: { dayOfWeek: 'asc' },
-    });
-
+    // Никого нет — создаём своё лобби
     await this.prisma.questLobby.create({
-      data: { 
-        templateId: questId, 
-        hostId: userId, 
-        status: 'WAITING',
-        hostSlots: userSlots,
-      },
+      data: { templateId: questId, hostId: userId, status: 'WAITING' },
     });
 
     return { status: 'waiting' };
@@ -244,6 +269,83 @@ export class QuestsService {
     }
 
     return updated;
+  }
+
+  // --- СОГЛАСОВАНИЕ ДАТЫ ---
+
+  async proposeDate(matchId: number, userId: number, proposedDate: Date) {
+    const match = await this.prisma.questLobby.findUnique({ where: { id: matchId } });
+    if (!match || match.schedulingStatus === 'CONFIRMED') return null;
+
+    const updated = await this.prisma.questLobby.update({
+      where: { id: matchId },
+      data: { proposedDate, proposedBy: userId, schedulingStatus: 'PROPOSED' },
+    });
+
+    // Уведомляем партнёра
+    const partnerId = match.hostId === userId ? match.participantId : match.hostId;
+    if (partnerId) {
+      this.chatGateway.server.to(`user_${partnerId}`).emit('dateProposed', { matchId, proposedDate, proposedBy: userId });
+    }
+
+    return updated;
+  }
+
+  async confirmDate(matchId: number, userId: number, accept: boolean, counterDate?: Date) {
+    const match = await this.prisma.questLobby.findUnique({
+      where: { id: matchId },
+      include: { host: true, participant: true }
+    });
+    if (!match) return null;
+
+    if (accept && match.proposedDate) {
+      const updated = await this.prisma.questLobby.update({
+        where: { id: matchId },
+        data: { scheduledAt: match.proposedDate, schedulingStatus: 'CONFIRMED' },
+      });
+
+      // Уведомляем обоих об открытии чата
+      this.chatGateway.server.to(`user_${match.hostId}`).emit('dateConfirmed', matchId);
+      if (match.participantId) {
+        this.chatGateway.server.to(`user_${match.participantId}`).emit('dateConfirmed', matchId);
+      }
+
+      const proposerName = match.proposedBy === match.hostId
+        ? match.host.firstName
+        : match.participant?.firstName;
+
+      if (match.host) {
+        this.notifications.sendTelegramPush(
+          match.host.telegramId,
+          `✅ Дата встречи подтверждена! Чат открыт.`
+        );
+      }
+      if (match.participant) {
+        this.notifications.sendTelegramPush(
+          match.participant.telegramId,
+          `✅ Дата встречи подтверждена! Чат открыт.`
+        );
+      }
+
+      return updated;
+    }
+
+    if (!accept && counterDate) {
+      // Предлагаем встречную дату
+      const updated = await this.prisma.questLobby.update({
+        where: { id: matchId },
+        data: { proposedDate: counterDate, proposedBy: userId, schedulingStatus: 'PROPOSED' },
+      });
+
+      const partnerId = match.hostId === userId ? match.participantId : match.hostId;
+      if (partnerId) {
+        this.chatGateway.server.to(`user_${partnerId}`).emit('dateProposed', { matchId, proposedDate: counterDate, proposedBy: userId });
+      }
+
+      return updated;
+    }
+
+    return null;
   }
 
   // --- ИСТОРИЯ ---

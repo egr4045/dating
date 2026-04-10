@@ -1,64 +1,79 @@
 <template>
-  <div class="match-wrapper" v-if="match">
-    <div class="glass-card match-card">
-      
-      <header class="match-header">
-        <div class="pulse-dot"></div>
-        <h2>Задание началось!</h2>
-      </header>
+  <div class="page active-match" v-if="match">
 
-      <div class="quest-banner" :style="{ background: match.template.imageUrl ? `url(${match.template.imageUrl}) center/cover` : 'linear-gradient(45deg, #a1c4fd, #c2e9fb)' }">
-        <div class="banner-overlay">
-          <h3>{{ match.template.title }}</h3>
-          <p>{{ match.template.description }}</p>
+    <!-- Шапка с событием -->
+    <div class="match-hero" :style="heroStyle">
+      <div class="match-hero__overlay" />
+      <div class="match-hero__content">
+        <div class="flex items-center gap-8">
+          <div class="pulse-dot" />
+          <span class="text-sm font-bold" style="color:rgba(255,255,255,0.9)">Встреча подтверждена</span>
+        </div>
+        <h2>{{ match.template?.title }}</h2>
+        <div v-if="match.scheduledAt" class="hero-date">
+          📅 {{ formatDate(match.scheduledAt) }}
         </div>
       </div>
-
-      <div class="partner-zone" v-if="partner">
-        <div class="avatar">{{ partner.firstName[0] }}</div>
-        <div class="partner-info">
-          <p class="label">Твой напарник</p>
-          <p class="name">{{ partner.firstName }}</p>
-        </div>
-      </div>
-
-      <div class="chat-section">
-        <div class="messages-list" ref="chatContainer">
-          <div v-if="messages.length === 0" class="empty-chat">
-            Напиши «Привет!», чтобы начать общение 👋
-          </div>
-          
-          <div 
-            v-for="msg in messages" 
-            :key="msg.id"
-            :class="['message-bubble', msg.senderId === currentUserId ? 'my-message' : 'partner-message']"
-          >
-            {{ msg.text }}
-          </div>
-        </div>
-        
-        <div class="chat-input-area">
-          <input 
-            v-model="newMessage" 
-            @keyup.enter="sendMessage"
-            placeholder="Сообщение..." 
-            class="chat-input"
-          />
-          <button @click="sendMessage" class="send-btn" :disabled="!newMessage.trim()">➤</button>
-        </div>
-      </div>
-
-      <div class="actions">
-        <div v-if="!canFinish" class="timer-overlay">
-          <span class="lock-icon">🔒</span>
-          <p>Кнопки разблокируются через <strong>{{ timeRemaining }}</strong></p>
-        </div>
-
-        <button class="danger-btn" :disabled="!canFinish" @click="cancelMatch">Сорвалось</button>
-        <button class="success-btn" :disabled="!canFinish" @click="finishMatch">Всё супер!</button>
-      </div>
-
+      <div class="payment-badge" style="position:absolute;top:14px;right:14px">🤝 50/50</div>
     </div>
+
+    <!-- Партнёр (полная анкета теперь доступна) -->
+    <div v-if="partner" class="partner-card">
+      <div class="partner-card__photo">
+        <img v-if="partner.photoUrl" :src="partner.photoUrl" class="partner-avatar-img" />
+        <div v-else class="avatar avatar-lg">{{ partner.firstName?.[0] }}</div>
+        <div v-if="partner.videoVerified" class="verified-badge">✅ Верифицирован</div>
+      </div>
+      <div class="partner-card__info">
+        <div class="flex items-center gap-8">
+          <h3>{{ partner.firstName }}</h3>
+          <span v-if="partner.age" class="badge badge-muted">{{ partner.age }} лет</span>
+          <span v-if="partner.city" class="badge badge-muted">📍 {{ partner.city }}</span>
+        </div>
+        <p v-if="partner.bio" class="text-sm text-muted">{{ partner.bio }}</p>
+        <div v-if="partner.interests?.length" class="chips-wrap">
+          <span v-for="i in partner.interests.slice(0,5)" :key="i" class="chip chip-default chip-sm">
+            {{ interestEmoji(i) }} {{ i }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Чат -->
+    <div class="chat-section">
+      <div class="messages-list" ref="chatContainer">
+        <div v-if="messages.length === 0" class="empty-chat">
+          Напиши «Привет!», чтобы начать общение 👋
+        </div>
+        <div
+          v-for="msg in messages"
+          :key="msg.id"
+          :class="['message-bubble', msg.senderId === currentUserId ? 'my-message' : 'partner-message']"
+        >{{ msg.text }}</div>
+      </div>
+
+      <div class="chat-input-area">
+        <input
+          v-model="newMessage"
+          @keyup.enter="sendMessage"
+          placeholder="Сообщение..."
+          class="input chat-input"
+        />
+        <button @click="sendMessage" class="send-btn" :disabled="!newMessage.trim()">➤</button>
+      </div>
+    </div>
+
+    <!-- Кнопки завершения -->
+    <div class="finish-area">
+      <div v-if="!canFinish" class="timer-note text-sm text-muted text-center">
+        🔒 Кнопки разблокируются через {{ timeRemaining }}
+      </div>
+      <div class="finish-btns">
+        <button class="btn btn-danger" :disabled="!canFinish" @click="cancelMatch">😔 Сорвалось</button>
+        <button class="btn btn-success" :disabled="!canFinish" @click="finishMatch">🎉 Всё прошло!</button>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -71,130 +86,117 @@ import { API_URL } from '../config';
 const route = useRoute();
 const router = useRouter();
 const match = ref<any>(null);
-
-// Чат
 const currentUserId = parseInt(localStorage.getItem('userId') || '0');
 const messages = ref<any[]>([]);
 const newMessage = ref('');
-let socket: Socket;
 const chatContainer = ref<HTMLElement | null>(null);
-
-// Таймер
 const canFinish = ref(false);
-const timeRemaining = ref('10:00');
-let timerInterval: any = null;
+const timeRemaining = ref('15:00');
+
+let socket: Socket;
+let timerInterval: ReturnType<typeof setInterval> | null = null;
 
 const partner = computed(() => {
   if (!match.value) return null;
   return match.value.hostId === currentUserId ? match.value.participant : match.value.host;
 });
 
-const scrollToBottom = async () => {
-  await nextTick();
-  if (chatContainer.value) {
-    chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
-  }
+const heroStyle = computed(() => {
+  const img = match.value?.template?.imageUrl;
+  if (img) return { background: `linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.65) 100%), url(${img}) center/cover` };
+  return { background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)' };
+});
+
+function formatDate(dateStr: string) {
+  return new Date(dateStr).toLocaleString('ru-RU', {
+    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  });
+}
+
+const emojiMap: Record<string, string> = {
+  hookah: '💨', bar: '🍺', sport: '⚽', movie_theatre: '🎬', picnic: '🧺', bowling: '🎳',
+  dota: '⚔️', cs: '🔫', mc: '⛏️', wow: '🐉', itt: '🃏', split: '🎭',
+  movie_online: '🍿', series: '📺', chatting: '💬',
 };
+function interestEmoji(id: string) { return emojiMap[id] ?? '✨'; }
 
-const startTimer = () => {
+async function scrollToBottom() {
+  await nextTick();
+  if (chatContainer.value) chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+}
+
+function startTimer() {
   if (!match.value) return;
-  const matchTime = new Date(match.value.createdAt).getTime();
-  const waitTime = 15 * 60 * 1000; // 15 минут, как на бэкенде
-
+  const matchTime = new Date(match.value.scheduledAt || match.value.createdAt).getTime();
+  const waitTime = 15 * 60 * 1000;
   timerInterval = setInterval(() => {
     const diff = Date.now() - matchTime;
     if (diff >= waitTime) {
       canFinish.value = true;
-      clearInterval(timerInterval);
+      if (timerInterval) clearInterval(timerInterval);
     } else {
       const s = Math.floor((waitTime - diff) / 1000);
       const m = Math.floor(s / 60);
       timeRemaining.value = `${m}:${(s % 60).toString().padStart(2, '0')}`;
     }
   }, 1000);
-};
+}
 
-// --- ФУНКЦИЯ ПРОЧТЕНИЯ (ЕДИНСТВЕННАЯ) ---
-const markAsRead = () => {
-  if (socket && match.value) {
-    socket.emit('markAsRead', { matchId: match.value.id });
-  }
-};
+function markAsRead() {
+  if (socket && match.value) socket.emit('markAsRead', { matchId: match.value.id });
+}
 
-const loadMatch = async () => {
+async function loadMatch() {
   const token = localStorage.getItem('token');
   try {
     const res = await fetch(`${API_URL}/quests/match/${route.params.id}`, {
-      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      headers: { Authorization: `Bearer ${token}` },
     });
     match.value = await res.json();
+
+    // Если дата ещё не подтверждена — перенаправляем на экран планирования
+    if (match.value.schedulingStatus !== 'CONFIRMED') {
+      router.replace(`/match/${route.params.id}/schedule`);
+      return;
+    }
+
     messages.value = match.value.messages || [];
     startTimer();
     scrollToBottom();
 
-    socket = io(window.location.origin, {
-      path: '/api-socket',
-      auth: { token }
-    });
+    const wsUrl = API_URL.replace('/api', '');
+    socket = io(wsUrl, { path: '/api-socket', auth: { token } });
     socket.emit('joinRoom', match.value.id);
-    
     socket.on('newMessage', (msg) => {
       messages.value.push(msg);
       scrollToBottom();
-      markAsRead(); // Сообщаем бэку, что прочитали новое сообщение
+      markAsRead();
     });
-
-    markAsRead(); // Сообщаем бэку, что прочитали историю при входе
+    markAsRead();
   } catch (e) {
     console.error('Ошибка загрузки мэтча:', e);
   }
-};
+}
 
-const sendMessage = () => {
+function sendMessage() {
   if (!newMessage.value.trim() || !socket) return;
-  socket.emit('sendMessage', {
-    matchId: match.value.id,
-    text: newMessage.value.trim()
-  });
+  socket.emit('sendMessage', { matchId: match.value.id, text: newMessage.value.trim() });
   newMessage.value = '';
-};
+}
 
-// Кнопки выхода
-const cancelMatch = async () => {
+async function setStatus(status: 'COMPLETED' | 'FAILED') {
   const token = localStorage.getItem('token');
   if (!canFinish.value || !token) return;
-  try {
-    await fetch(`${API_URL}/quests/match/${match.value.id}/status`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ status: 'FAILED' })
-    });
-    router.push('/dashboard');
-  } catch (e) {
-    console.error('Ошибка при отмене квеста:', e);
-  }
-};
+  await fetch(`${API_URL}/quests/match/${match.value.id}/status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ status }),
+  });
+  router.push('/dashboard');
+}
 
-const finishMatch = async () => {
-  const token = localStorage.getItem('token');
-  if (!canFinish.value || !token) return;
-  try {
-    await fetch(`${API_URL}/quests/match/${match.value.id}/status`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ status: 'COMPLETED' })
-    });
-    router.push('/dashboard');
-  } catch (e) {
-    console.error('Ошибка при завершении квеста:', e);
-  }
-};
+function cancelMatch() { setStatus('FAILED'); }
+function finishMatch() { setStatus('COMPLETED'); }
 
 onMounted(loadMatch);
 onUnmounted(() => {
@@ -204,42 +206,130 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.match-wrapper { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
-.match-card { width: 100%; max-width: 480px; background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(20px); border-radius: 32px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.1); }
-.match-header { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 24px; background: #fff; border-bottom: 1px solid #f0f0f0; }
-.match-header h2 { margin: 0; font-size: 20px; color: #1d1d1f; }
-.pulse-dot { width: 12px; height: 12px; background: #43E97B; border-radius: 50%; animation: pulse 1.5s infinite; }
-@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(67, 233, 123, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(67, 233, 123, 0); } 100% { box-shadow: 0 0 0 0 rgba(67, 233, 123, 0); } }
-.quest-banner { position: relative; height: 180px; display: flex; align-items: flex-end; }
-.banner-overlay { width: 100%; padding: 20px; background: linear-gradient(to top, rgba(0,0,0,0.8), transparent); color: white; }
-.banner-overlay h3 { margin: 0 0 8px; font-size: 24px; }
-.banner-overlay p { margin: 0; font-size: 14px; opacity: 0.9; line-height: 1.4; }
-.partner-zone { display: flex; align-items: center; gap: 16px; padding: 24px; background: #fcfcfc; }
-.avatar { width: 56px; height: 56px; background: #7c9aff; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; }
-.partner-info .label { margin: 0 0 4px; font-size: 12px; color: #888; text-transform: uppercase; }
-.partner-info .name { margin: 0; font-size: 18px; font-weight: bold; color: #1d1d1f; }
+.active-match { overflow: hidden; }
 
-/* ЧАТ */
-.chat-section { display: flex; flex-direction: column; height: 300px; background: #f8faff; border-top: 1px solid #eee; border-bottom: 1px solid #eee; }
-.messages-list { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-.empty-chat { text-align: center; color: #a0a0a0; font-size: 14px; margin-top: auto; margin-bottom: auto; }
-.message-bubble { max-width: 80%; padding: 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.4; word-wrap: break-word; }
-.my-message { align-self: flex-end; background: #7c9aff; color: white; border-bottom-right-radius: 4px; }
-.partner-message { align-self: flex-start; background: #e5e5ea; color: #1d1d1f; border-bottom-left-radius: 4px; }
-.chat-input-area { display: flex; padding: 12px 16px; background: white; gap: 8px; }
-.chat-input { flex: 1; padding: 12px 16px; border: 1px solid #ddd; border-radius: 24px; outline: none; font-size: 14px; transition: border-color 0.2s; }
-.chat-input:focus { border-color: #7c9aff; }
-.send-btn { width: 44px; height: 44px; border-radius: 50%; background: #7c9aff; color: white; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; flex: none; }
-.send-btn:disabled { background: #ccc; cursor: not-allowed; }
+.match-hero {
+  position: relative;
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 16px 20px;
+  flex-shrink: 0;
+}
+.match-hero__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.5) 100%);
+  pointer-events: none;
+}
+.match-hero__content { position: relative; z-index: 1; color: #fff; display: flex; flex-direction: column; gap: 4px; }
+.match-hero__content h2 { font-size: 1.375rem; font-weight: 800; line-height: 1.2; }
+.hero-date { font-size: 0.8rem; opacity: 0.9; font-weight: 600; }
 
-/* КНОПКИ */
-.actions { position: relative; display: flex; gap: 16px; padding: 24px; background: #fff; overflow: hidden; }
-.timer-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(4px); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; color: #1d1d1f; font-size: 14px; }
-.timer-overlay .lock-icon { font-size: 24px; margin-bottom: 4px; }
-.timer-overlay strong { color: #7c9aff; font-size: 16px; }
-button { flex: 1; padding: 16px; border-radius: 16px; border: none; font-weight: 800; font-size: 16px; cursor: pointer; transition: all 0.2s; }
-button:active:not(:disabled) { transform: scale(0.95); }
-button:disabled { opacity: 0.3; cursor: not-allowed; }
-.danger-btn { background: #ffe5e5; color: #ff5252; }
-.success-btn { background: #43E97B; color: #106b31; box-shadow: 0 10px 20px rgba(67, 233, 123, 0.2); }
+.pulse-dot {
+  width: 8px; height: 8px; background: var(--success); border-radius: 50%;
+  animation: pulse-glow 1.5s infinite;
+}
+@keyframes pulse-glow {
+  0% { box-shadow: 0 0 0 0 rgba(126, 200, 160, 0.7); }
+  70% { box-shadow: 0 0 0 8px rgba(126, 200, 160, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(126, 200, 160, 0); }
+}
+
+.partner-card {
+  display: flex;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid #EDE8E5;
+  flex-shrink: 0;
+}
+.partner-card__photo { position: relative; flex-shrink: 0; }
+.partner-avatar-img { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; }
+.verified-badge {
+  position: absolute;
+  bottom: -4px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+.partner-card__info { display: flex; flex-direction: column; gap: 6px; }
+.chips-wrap { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip-sm { padding: 3px 8px; font-size: 0.75rem; }
+
+/* Чат */
+.chat-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-2);
+}
+.messages-list {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.empty-chat {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin: auto;
+}
+.message-bubble {
+  max-width: 78%;
+  padding: 10px 14px;
+  border-radius: 18px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  word-wrap: break-word;
+}
+.my-message {
+  align-self: flex-end;
+  background: var(--primary);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.partner-message {
+  align-self: flex-start;
+  background: var(--surface);
+  color: var(--text);
+  border-bottom-left-radius: 4px;
+  box-shadow: var(--shadow-sm);
+}
+.chat-input-area { display: flex; padding: 12px 16px; background: var(--surface); gap: 8px; flex-shrink: 0; }
+.chat-input { border-radius: 24px; padding: 10px 16px; font-size: 0.9rem; }
+.send-btn {
+  width: 44px; height: 44px; flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.send-btn:disabled { background: var(--text-light); cursor: not-allowed; }
+
+/* Финал */
+.finish-area {
+  padding: 14px 20px;
+  background: var(--surface);
+  border-top: 1px solid #EDE8E5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.finish-btns { display: flex; gap: 12px; }
+.finish-btns .btn { flex: 1; }
 </style>

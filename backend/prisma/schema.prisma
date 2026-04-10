@@ -9,31 +9,51 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Наша первая таблица
 model User {
-  id          Int      @id @default(autoincrement())
-  telegramId  String   @unique
-  username    String?
-  firstName   String
-  avatarUrl   String?
-  reputation  Float    @default(5.0)
-  interests   String[]
-  bannedUntil DateTime?  // Если задано и в будущем — юзер забанен
+  id              Int      @id @default(autoincrement())
+  telegramId      String   @unique
+  username        String?
+  firstName       String
+  avatarUrl       String?
+  reputation      Float    @default(5.0)
+  interests       String[]
+  bannedUntil     DateTime?
+
+  // Профиль
+  age             Int?
+  gender          String?      // "male" | "female" | "other"
+  city            String?
+  bio             String?
+  photoUrl        String?
+  videoUrl        String?
+  videoVerified   Boolean  @default(false)
+
+  // Предпочтения партнёра
+  prefGender      String?      // "male" | "female" | "any"
+  prefAgeMin      Int?         @default(18)
+  prefAgeMax      Int?         @default(50)
+
+  // Счётчик гостингов
+  ghostCount      Int      @default(0)
+
   hostedLobbies   QuestLobby[]  @relation("Host")
   joinedLobbies   QuestLobby[]  @relation("Participant")
   timeSlots       TimeSlot[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model QuestTemplate {
-  id          String   @id // Например, "mc-build-house"
-  title       String   // "Построить дом в Minecraft"
+  id          String   @id
+  title       String
   description String
   category    String   // "games", "offline", "online"
-  subcategory String   // "minecraft", "dota"
+  subcategory String
   lobbies     QuestLobby[]
-  imageUrl    String?  // Ссылка на фон карточки
+  imageUrl    String?
+  address     String?  // Адрес места события
+  price       String?  // "~500₽/чел", "бесплатно"
+  paymentRule String   @default("50/50")
 }
 
 model QuestLobby {
@@ -46,9 +66,12 @@ model QuestLobby {
   participant           User?         @relation("Participant", fields: [participantId], references: [id])
   status                String        @default("WAITING")
   
-  // Поля для времени встречи
-  scheduledAt           DateTime?     // Зафиксированное время встречи после выбора слота
-  hostSlots             Json?         // Снимок слотов хоста на момент создания лобби
+  // Поля для согласования даты встречи
+  scheduledAt           DateTime?     // Зафиксированная дата встречи
+  hostSlots             Json?         // Снимок слотов хоста (legacy)
+  proposedDate          DateTime?     // Предложенная дата (до подтверждения)
+  proposedBy            Int?          // userId того, кто предложил
+  schedulingStatus      String        @default("PENDING") // "PENDING" | "PROPOSED" | "CONFIRMED"
   
   // Поля для чата и пушей
   lastMessageAt         DateTime?     // Время последнего сообщения

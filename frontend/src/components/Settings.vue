@@ -1,72 +1,85 @@
 <template>
-  <div class="settings-container">
-    <div class="glass-card">
-      <header class="settings-header">
-        <button class="back-btn" @click="$router.push('/dashboard')">← Назад</button>
-        <h1 class="page-title">Настройки</h1>
-      </header>
+  <div class="page settings">
 
-      <div v-if="loading" class="loading-state">Загрузка...</div>
+    <header class="app-header">
+      <button class="icon-btn" @click="$router.push('/dashboard')">←</button>
+      <div class="app-header__logo">Настройки</div>
+      <div style="width:40px" />
+    </header>
 
-      <template v-else>
-        <!-- Репутация -->
-        <div class="reputation-block">
-          <div class="rep-header">
-            <span class="rep-label">Твоя репутация</span>
-            <span class="rep-value" :class="repClass">{{ profile?.reputation?.toFixed(1) }}</span>
+    <div v-if="loading" class="page-content" style="align-items:center;justify-content:center">
+      <div style="font-size:2rem;animation:spin 1s linear infinite">🌀</div>
+    </div>
+
+    <div v-else class="page-content anim-fade-up">
+
+      <!-- Профиль -->
+      <div class="card profile-card">
+        <div class="profile-photo">
+          <img v-if="profile?.photoUrl" :src="profile.photoUrl" class="avatar-img" />
+          <div v-else class="avatar avatar-xl">{{ profile?.firstName?.[0] }}</div>
+        </div>
+        <div class="profile-info">
+          <h2>{{ profile?.firstName }}</h2>
+          <div class="profile-meta">
+            <span v-if="profile?.age" class="badge badge-muted">{{ profile.age }} лет</span>
+            <span v-if="profile?.city" class="badge badge-muted">📍 {{ profile.city }}</span>
+            <span v-if="profile?.videoVerified" class="badge badge-success">✅ Верифицирован</span>
           </div>
-          <div class="rep-bar-bg">
-            <div class="rep-bar-fill" :style="{ width: repPercent + '%' }"></div>
+          <p v-if="profile?.bio" class="text-sm text-muted">{{ profile.bio }}</p>
+        </div>
+      </div>
+
+      <!-- Репутация -->
+      <div class="card">
+        <div class="section-label">Рейтинг надёжности</div>
+        <div class="rep-row">
+          <span class="rep-score" :class="repClass">{{ profile?.reputation?.toFixed(1) }}</span>
+          <span class="text-muted text-sm">/ 10</span>
+        </div>
+        <div class="progress-bar" style="margin-top:10px">
+          <div class="progress-bar__fill" :class="repClass" :style="{ width: repPercent + '%' }" />
+        </div>
+        <p class="text-xs text-muted" style="margin-top:6px">{{ repHint }}</p>
+      </div>
+
+      <!-- Интересы -->
+      <div class="card">
+        <div class="section-label">🎯 Мои интересы</div>
+        <div v-for="group in interestGroups" :key="group.key" class="interest-group">
+          <div class="text-xs text-muted" style="font-weight:600;margin-bottom:6px">{{ group.emoji }} {{ group.label }}</div>
+          <div class="chips-wrap">
+            <button
+              v-for="item in group.items"
+              :key="item.id"
+              class="chip"
+              :class="selectedInterests.includes(item.id) ? 'chip-active' : 'chip-default'"
+              @click="toggleInterest(item.id)"
+            >{{ item.emoji }} {{ item.label }}</button>
           </div>
         </div>
+        <button class="btn btn-primary btn-full btn-sm" @click="saveInterests" :disabled="savingInterests" style="margin-top:8px">
+          {{ savingInterests ? 'Сохранение...' : 'Сохранить интересы' }}
+        </button>
+      </div>
 
-        <!-- Интересы -->
-        <section class="settings-section">
-          <h2 class="section-heading">🎯 Мои интересы</h2>
+      <!-- Предпочтения партнёра -->
+      <div class="card">
+        <div class="section-label">👥 Ищу партнёра</div>
+        <div class="gender-btns">
+          <button
+            v-for="g in prefGenders"
+            :key="g.value"
+            class="gender-btn"
+            :class="{ active: prefGender === g.value }"
+            @click="prefGender = g.value"
+          >{{ g.emoji }} {{ g.label }}</button>
+        </div>
+        <button class="btn btn-primary btn-full btn-sm" @click="savePreferences" :disabled="savingPrefs" style="margin-top:12px">
+          {{ savingPrefs ? 'Сохранение...' : 'Сохранить предпочтения' }}
+        </button>
+      </div>
 
-          <div class="spotify-grid">
-            <div 
-              v-for="(val, groupKey) in categories" 
-              :key="groupKey"
-              :class="['spotify-card-mini', { active: isGroupActive(groupKey as string) }]"
-              :style="{ background: val.color }"
-              @click="toggleGroup(groupKey as string)"
-            >
-              <span class="card-label">{{ val.title }}</span>
-              <div class="card-check" v-if="isGroupActive(groupKey as string)">✓</div>
-            </div>
-          </div>
-
-          <div class="details-stack" v-if="activeGroups.length > 0">
-            <div v-for="groupKey in activeGroups" :key="groupKey" class="detail-section">
-              <h3 class="section-title-sm">{{ categories[groupKey].title }}</h3>
-              <div class="chips-wrap">
-                <button 
-                  v-for="item in categories[groupKey].items" 
-                  :key="item.id"
-                  :class="['modern-chip', { active: selectedInterests.includes(item.id) }]"
-                  @click="toggleInterest(item.id)"
-                >
-                  {{ item.label }}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <button class="save-btn" @click="saveInterests" :disabled="savingInterests">
-            {{ savingInterests ? 'Сохранение...' : 'Сохранить интересы' }}
-          </button>
-        </section>
-
-        <!-- Слоты -->
-        <section class="settings-section">
-          <h2 class="section-heading">🕐 Моё расписание</h2>
-          <SlotPicker v-model="timeSlots" title="" />
-          <button class="save-btn" @click="saveSlots" :disabled="savingSlots">
-            {{ savingSlots ? 'Сохранение...' : 'Сохранить расписание' }}
-          </button>
-        </section>
-      </template>
     </div>
   </div>
 </template>
@@ -74,272 +87,150 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { API_URL } from '../config';
-import SlotPicker from './SlotPicker.vue';
 
 const loading = ref(true);
 const savingInterests = ref(false);
-const savingSlots = ref(false);
+const savingPrefs = ref(false);
 const profile = ref<any>(null);
 const selectedInterests = ref<string[]>([]);
-const timeSlots = ref<{ dayOfWeek: number; timeFrom: string; timeTo: string }[]>([]);
+const prefGender = ref('any');
 
-const categories: any = {
-  offline: {
-    title: '📍 Оффлайн',
-    color: 'linear-gradient(135deg, #FF6B6B, #FF8E53)',
-    items: [
-      { id: 'hookah', label: '💨 Кальян' }, { id: 'bar', label: '🍻 Бар' },
-      { id: 'sport', label: '⚽ Спорт' }, { id: 'movie_theatre', label: '🍿 Кино' },
-      { id: 'picnic', label: '🌳 Прогулка' }
-    ]
-  },
-  games: {
-    title: '🎮 Игры',
-    color: 'linear-gradient(135deg, #4facfe, #00f2fe)',
-    items: [
-      { id: 'dota', label: '⚔️ Dota 2' }, { id: 'cs', label: '🔫 CS 2' },
-      { id: 'mc', label: '⛏️ Minecraft' }, { id: 'wow', label: '🐉 WoW' },
-      { id: 'itt', label: '👫 It Takes Two' }, { id: 'split', label: '🎮 Split Screen' }
-    ]
-  },
-  online: {
-    title: '💻 Онлайн',
-    color: 'linear-gradient(135deg, #a18cd1, #fbc2eb)',
-    items: [
-      { id: 'movie_online', label: '🎬 Кино' }, { id: 'series', label: '📺 Сериалы' },
-      { id: 'chatting', label: '💬 Just Chatting' }
-    ]
-  }
-};
-
-// Определяем активные группы на основе выбранных интересов
-const activeGroups = computed(() => {
-  const groups: string[] = [];
-  for (const [key, val] of Object.entries(categories)) {
-    if ((val as any).items.some((item: any) => selectedInterests.value.includes(item.id))) {
-      groups.push(key);
-    }
-  }
-  return groups;
-});
-
-const isGroupActive = (key: string) => activeGroups.value.includes(key);
-
-const toggleGroup = (key: string) => {
-  const groupItems = categories[key].items.map((i: any) => i.id);
-  if (isGroupActive(key)) {
-    selectedInterests.value = selectedInterests.value.filter(id => !groupItems.includes(id));
-  } else {
-    // Добавляем все айтемы группы, которых ещё нет
-    groupItems.forEach((id: string) => {
-      if (!selectedInterests.value.includes(id)) {
-        selectedInterests.value.push(id);
-      }
-    });
-  }
-};
-
-const toggleInterest = (id: string) => {
-  if (selectedInterests.value.includes(id)) {
-    selectedInterests.value = selectedInterests.value.filter(i => i !== id);
-  } else {
-    selectedInterests.value.push(id);
-  }
-};
-
-const repPercent = computed(() => Math.min(100, Math.max(0, ((profile.value?.reputation || 0) / 10) * 100)));
+const repPercent = computed(() => Math.min(100, Math.max(0, ((profile.value?.reputation ?? 0) / 10) * 100)));
 const repClass = computed(() => {
-  const r = profile.value?.reputation || 0;
+  const r = profile.value?.reputation ?? 0;
   if (r >= 4) return 'rep-good';
   if (r >= 2) return 'rep-warn';
   return 'rep-bad';
 });
+const repHint = computed(() => {
+  const r = profile.value?.reputation ?? 0;
+  if (r >= 4) return '✨ Отличная репутация, продолжай в том же духе!';
+  if (r >= 2) return '⚠️ Старайся не пропускать встречи';
+  return '🚨 Критически низко — ещё немного и временный бан';
+});
 
-const loadProfile = async () => {
+const prefGenders = [
+  { value: 'any', emoji: '🌟', label: 'Любой' },
+  { value: 'male', emoji: '👦', label: 'Парень' },
+  { value: 'female', emoji: '👧', label: 'Девушка' },
+];
+
+const interestGroups = [
+  {
+    key: 'offline', emoji: '🌍', label: 'Активности',
+    items: [
+      { id: 'hookah', emoji: '💨', label: 'Кальян' }, { id: 'bar', emoji: '🍺', label: 'Бар' },
+      { id: 'sport', emoji: '⚽', label: 'Спорт' }, { id: 'movie_theatre', emoji: '🎬', label: 'Кино' },
+      { id: 'picnic', emoji: '🧺', label: 'Пикник' }, { id: 'bowling', emoji: '🎳', label: 'Боулинг' },
+    ]
+  },
+  {
+    key: 'games', emoji: '🎮', label: 'Игры',
+    items: [
+      { id: 'dota', emoji: '⚔️', label: 'Dota 2' }, { id: 'cs', emoji: '🔫', label: 'CS2' },
+      { id: 'mc', emoji: '⛏️', label: 'Minecraft' }, { id: 'wow', emoji: '🐉', label: 'WoW' },
+      { id: 'itt', emoji: '🃏', label: 'Настолки' }, { id: 'split', emoji: '🎭', label: 'Splitgate' },
+    ]
+  },
+  {
+    key: 'online', emoji: '📱', label: 'Онлайн',
+    items: [
+      { id: 'movie_online', emoji: '🍿', label: 'Кино онлайн' },
+      { id: 'series', emoji: '📺', label: 'Сериалы' },
+      { id: 'chatting', emoji: '💬', label: 'Поболтать' },
+    ]
+  },
+];
+
+function toggleInterest(id: string) {
+  const idx = selectedInterests.value.indexOf(id);
+  if (idx === -1) selectedInterests.value.push(id);
+  else selectedInterests.value.splice(idx, 1);
+}
+
+async function loadProfile() {
   const token = localStorage.getItem('token');
   if (!token) return;
-
   try {
-    const res = await fetch(`${API_URL}/users/me`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const res = await fetch(`${API_URL}/users/me`, { headers: { Authorization: `Bearer ${token}` } });
     profile.value = await res.json();
-    selectedInterests.value = [...(profile.value.interests || [])];
-    timeSlots.value = (profile.value.timeSlots || []).map((s: any) => ({
-      dayOfWeek: s.dayOfWeek,
-      timeFrom: s.timeFrom,
-      timeTo: s.timeTo,
-    }));
-  } catch (e) {
-    console.error('Ошибка загрузки профиля:', e);
+    selectedInterests.value = [...(profile.value.interests ?? [])];
+    prefGender.value = profile.value.prefGender ?? 'any';
   } finally {
     loading.value = false;
   }
-};
+}
 
-const saveInterests = async () => {
+async function saveInterests() {
   const token = localStorage.getItem('token');
   if (!token) return;
   savingInterests.value = true;
-  try {
-    await fetch(`${API_URL}/users/interests`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ interests: selectedInterests.value }),
-    });
-    alert('Интересы сохранены! ✅');
-  } catch (e) {
-    alert('Ошибка сохранения');
-  } finally {
-    savingInterests.value = false;
-  }
-};
+  await fetch(`${API_URL}/users/interests`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ interests: selectedInterests.value }),
+  });
+  savingInterests.value = false;
+}
 
-const saveSlots = async () => {
+async function savePreferences() {
   const token = localStorage.getItem('token');
   if (!token) return;
-  savingSlots.value = true;
-  try {
-    await fetch(`${API_URL}/users/slots`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ slots: timeSlots.value }),
-    });
-    alert('Расписание сохранено! ✅');
-  } catch (e) {
-    alert('Ошибка сохранения');
-  } finally {
-    savingSlots.value = false;
-  }
-};
+  savingPrefs.value = true;
+  await fetch(`${API_URL}/users/profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ prefGender: prefGender.value }),
+  });
+  savingPrefs.value = false;
+}
 
 onMounted(loadProfile);
 </script>
 
 <style scoped>
-.settings-container {
-  display: flex;
-  justify-content: center;
-  padding: 24px;
-  min-height: 100vh;
-}
+.settings { background: var(--bg); }
 
-.glass-card {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px);
-  border-radius: 32px;
-  padding: 40px;
-  width: 100%;
-  max-width: 600px;
-  box-shadow: 0 30px 60px rgba(0,0,0,0.08);
-}
-
-.settings-header {
+.profile-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 32px;
+  gap: 14px;
+  text-align: center;
 }
-.back-btn {
-  background: #f2f2f7;
-  border: none;
-  padding: 10px 16px;
-  border-radius: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.back-btn:hover { background: #e5e5ea; }
-.page-title { font-size: 28px; font-weight: 800; color: #1d1d1f; margin: 0; }
+.profile-photo { position: relative; }
+.avatar-img { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; }
+.profile-info { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.profile-info h2 { margin: 0; }
+.profile-meta { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 
-.loading-state { text-align: center; padding: 40px; color: #86868b; }
+.rep-row { display: flex; align-items: baseline; gap: 6px; margin-top: 6px; }
+.rep-score { font-size: 2rem; font-weight: 800; }
+.rep-good { color: var(--success); }
+.rep-warn { color: var(--warning); }
+.rep-bad { color: var(--danger); }
+.progress-bar__fill.rep-good { background: var(--success); }
+.progress-bar__fill.rep-warn { background: var(--warning); }
+.progress-bar__fill.rep-bad { background: var(--danger); }
 
-/* Репутация */
-.reputation-block {
-  background: #f8f9fc;
-  border-radius: 20px;
-  padding: 20px 24px;
-  margin-bottom: 32px;
-}
-.rep-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.rep-label { font-weight: 600; color: #86868b; font-size: 14px; }
-.rep-value { font-weight: 800; font-size: 20px; }
-.rep-good { color: #43E97B; }
-.rep-warn { color: #ffb300; }
-.rep-bad { color: #ff5252; }
-.rep-bar-bg { height: 8px; background: #e5e5ea; border-radius: 4px; overflow: hidden; }
-.rep-bar-fill { height: 100%; background: linear-gradient(90deg, #43E97B, #38f9d7); border-radius: 4px; transition: width 0.5s ease; }
+.interest-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.chips-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
 
-/* Секции */
-.settings-section {
-  border-top: 1px solid #f0f0f0;
-  padding-top: 28px;
-  margin-top: 28px;
-}
-.section-heading { font-size: 20px; font-weight: 800; color: #1d1d1f; margin: 0 0 20px; }
-
-/* Мини-карточки категорий */
-.spotify-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 20px;
-}
-.spotify-card-mini {
-  height: 80px;
-  border-radius: 16px;
-  padding: 14px;
-  color: white;
-  cursor: pointer;
-  position: relative;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: flex-end;
-  font-size: 14px;
-}
-.spotify-card-mini:hover { transform: scale(1.03); }
-.spotify-card-mini.active { box-shadow: 0 0 0 3px #7c9aff; }
-.card-label { font-weight: 800; font-size: 14px; }
-.card-check {
-  position: absolute;
-  top: 8px; right: 8px;
-  background: white; color: black;
-  width: 24px; height: 24px;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: bold; font-size: 12px;
-}
-
-.details-stack { display: flex; flex-direction: column; gap: 20px; margin-bottom: 20px; }
-.section-title-sm { font-size: 12px; text-transform: uppercase; color: #86868b; font-weight: 700; letter-spacing: 1px; }
-.chips-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.modern-chip {
-  padding: 10px 18px;
-  border-radius: 100px;
-  border: 2px solid #f2f2f7;
-  background: white;
+.gender-btns { display: flex; gap: 10px; }
+.gender-btn {
+  flex: 1;
+  padding: 10px 6px;
+  border-radius: var(--radius-sm);
+  border: 2px solid #EDE8E5;
+  background: var(--surface);
+  font-family: var(--font);
+  font-size: 0.8rem;
   font-weight: 600;
-  font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  color: var(--text-muted);
+  transition: all 0.15s;
 }
-.modern-chip:hover { background: #f2f2f7; }
-.modern-chip.active { background: #1d1d1f; color: white; border-color: #1d1d1f; }
+.gender-btn.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
 
-.save-btn {
-  width: 100%;
-  padding: 16px;
-  border-radius: 16px;
-  border: none;
-  background: #4a6fff;
-  color: white;
-  font-weight: 800;
-  font-size: 16px;
-  cursor: pointer;
-  margin-top: 20px;
-  transition: all 0.2s;
-  box-shadow: 0 8px 20px rgba(74, 111, 255, 0.2);
-}
-.save-btn:hover:not(:disabled) { background: #365cf5; transform: translateY(-1px); }
-.save-btn:disabled { background: #e5e5ea; color: #aeaeb2; box-shadow: none; cursor: not-allowed; }
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>
