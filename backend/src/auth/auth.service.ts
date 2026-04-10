@@ -17,56 +17,65 @@ export class AuthService implements OnModuleInit {
 
   onModuleInit() {
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    console.log('Проверка токена бота:', botToken ? `ЗАДАН (длина: ${botToken.length})` : 'ОТСУТСТВУЕТ');
+
     if (!botToken) {
       console.warn('⚠️  TELEGRAM_BOT_TOKEN не задан — Telegram бот отключён.');
       return;
     }
 
-    this.bot = new Telegraf(botToken);
+    try {
+      this.bot = new Telegraf(botToken);
 
-    // Слушаем переход по диплинку: t.me/bot?start=12345
-    this.bot.start(async (ctx) => {
-      const payload = ctx.message.text.split(' ')[1]; // Достаем код после /start
+      this.bot.catch((err) => {
+        console.error('Ошибка внутри Telegraf:', err);
+      });
 
-      if (payload && this.loginSessions.has(payload)) {
-        const tgUser = ctx.from;
-        
-        // 1. Ищем или создаем юзера
-        let user = await this.prisma.user.findUnique({
-          where: { telegramId: tgUser.id.toString() },
-        });
+      // Слушаем переход по диплинку: t.me/bot?start=12345
+      this.bot.start(async (ctx) => {
+        console.log('Получена команда /start от:', ctx.from.username);
+        const payload = ctx.message.text.split(' ')[1];
 
-        if (!user) {
-          user = await this.prisma.user.create({
-            data: {
-              telegramId: tgUser.id.toString(),
-              firstName: tgUser.first_name,
-              username: tgUser.username,
-            },
+        if (payload && this.loginSessions.has(payload)) {
+          const tgUser = ctx.from;
+          
+          let user = await this.prisma.user.findUnique({
+            where: { telegramId: tgUser.id.toString() },
           });
+
+          if (!user) {
+            user = await this.prisma.user.create({
+              data: {
+                telegramId: tgUser.id.toString(),
+                firstName: tgUser.first_name,
+                username: tgUser.username,
+              },
+            });
+          }
+
+          const jwt = this.jwtService.sign({ sub: user.id, telegramId: user.telegramId });
+          this.loginSessions.set(payload, { status: 'authenticated', jwt, user });
+
+          const frontendUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:4173';
+          
+          await ctx.reply(
+              `Привет, ${user.firstName}! Ты успешно вошел.\n\nНажми кнопку ниже или перейди по ссылке:\n${frontendUrl}`,
+              Markup.inlineKeyboard([
+                  Markup.button.url('Вернуться на сайт 🚀', frontendUrl)
+              ])
+          );
+        } else {
+          ctx.reply('Привет! Я бот Party Finder. Чтобы войти на сайт, нажми кнопку логина там.');
         }
+      });
 
-        // 2. Генерируем цифровой пропуск (JWT)
-        const jwt = this.jwtService.sign({ sub: user.id, telegramId: user.telegramId });
-        
-        // 3. Обновляем статус сессии, чтобы фронтенд мог её забрать
-        this.loginSessions.set(payload, { status: 'authenticated', jwt, user });
+      this.bot.launch()
+        .then(() => console.log('🤖 Telegram Бот запущен и слушает команды!'))
+        .catch(err => console.error('Ошибка при запуске (launch) Telegram бота:', err));
 
-        const frontendUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:4173';
-        
-        await ctx.reply(
-            `Привет, ${user.firstName}! Ты успешно вошел.\n\nНажми кнопку ниже или перейди по ссылке:\n${frontendUrl}`,
-            Markup.inlineKeyboard([
-                Markup.button.url('Вернуться на сайт 🚀', frontendUrl)
-            ])
-        );
-      } else {
-        ctx.reply('Привет! Я бот Party Finder. Чтобы войти на сайт, нажми кнопку логина там.');
-      }
-    });
-
-    this.bot.launch();
-    console.log('🤖 Telegram Бот запущен и слушает команды!');
+    } catch (err) {
+      console.error('Критическая ошибка инициализации бота:', err);
+    }
   }
 
   // Генерация уникального кода для фронтенда
