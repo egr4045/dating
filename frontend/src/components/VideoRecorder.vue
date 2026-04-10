@@ -69,7 +69,6 @@ const recordedUrl = ref('');
 const recordedBlob = ref<Blob | null>(null);
 
 const videoEl = ref<HTMLVideoElement>();
-const playbackEl = ref<HTMLVideoElement>();
 
 let stream: MediaStream | null = null;
 let recorder: MediaRecorder | null = null;
