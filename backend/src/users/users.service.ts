@@ -9,6 +9,30 @@ export class UsersService {
     private jwtService: JwtService
   ) {}
 
+  async updateProfile(userId: number, data: {
+    firstName?: string;
+    age?: number;
+    gender?: string;
+    city?: string;
+    bio?: string;
+    photoUrl?: string;
+    prefGender?: string;
+    prefAgeMin?: number;
+    prefAgeMax?: number;
+  }) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data,
+    });
+  }
+
+  async updateVideo(userId: number, videoUrl: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { videoUrl, videoVerified: false },
+    });
+  }
+
   async updateInterests(userId: number, interests: string[]) {
     return this.prisma.user.update({
       where: { id: userId },
@@ -36,6 +60,17 @@ export class UsersService {
         reputation: true,
         interests: true,
         bannedUntil: true,
+        age: true,
+        gender: true,
+        city: true,
+        bio: true,
+        photoUrl: true,
+        videoUrl: true,
+        videoVerified: true,
+        prefGender: true,
+        prefAgeMin: true,
+        prefAgeMax: true,
+        ghostCount: true,
         timeSlots: {
           select: { id: true, dayOfWeek: true, timeFrom: true, timeTo: true },
           orderBy: { dayOfWeek: 'asc' },

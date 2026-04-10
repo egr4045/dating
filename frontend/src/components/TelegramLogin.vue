@@ -1,61 +1,67 @@
 <template>
-  <div class="login-wrapper">
-    <div class="glass-card">
-      <header>
-        <h1 class="huge-title">Привет! 👋</h1>
-        <p class="subtitle">Чтобы найти компанию, нужно войти через Telegram</p>
-      </header>
+  <div class="login-page">
 
-      <div class="content">
-        <div v-if="!loginToken" class="loading-state">
-          <span class="loader"></span>
-          <p>Готовим сессию...</p>
+    <div class="login-card anim-scale-in">
+      <!-- Логотип / иллюстрация -->
+      <div class="login-hero">
+        <div class="hero-emoji">🌟</div>
+        <h1>Meetup</h1>
+        <p>Находи компанию для любых событий — без лишнего давления</p>
+      </div>
+
+      <!-- Состояния авторизации -->
+      <div class="auth-block">
+        <div v-if="!loginToken" class="status-row">
+          <div class="mini-spinner" />
+          <span class="text-muted text-sm">Готовим сессию...</span>
         </div>
 
-        <div v-else class="auth-action">
-          <div v-if="status === 'pending'">
-            <a :href="tgLink" target="_blank" class="tg-button">
-              Открыть Telegram
+        <template v-else>
+          <div v-if="status === 'pending'" class="flex-col gap-16">
+            <a :href="tgLink" target="_blank" class="btn btn-primary btn-full">
+              ✈️ Войти через Telegram
             </a>
-            <div class="status-msg">
-              <span class="loader-small"></span>
-              Ждем подтверждения в приложении...
+            <div class="status-row">
+              <div class="mini-spinner" />
+              <span class="text-muted text-sm">Ждём подтверждения в боте...</span>
             </div>
           </div>
 
-          <div v-if="status === 'expired'" class="error-zone">
-            <p>Время вышло ⏱️</p>
-            <button @click="getCode" class="retry-btn">Попробовать снова</button>
+          <div v-if="status === 'expired'" class="flex-col gap-12 text-center">
+            <p class="text-muted">Время вышло ⏱️</p>
+            <button class="btn btn-outline btn-full" @click="getCode">Попробовать снова</button>
           </div>
+        </template>
+      </div>
+
+      <p class="safety-note">🔒 Мы получаем только имя и аватар. Никаких лишних данных.</p>
+
+      <!-- Dev login -->
+      <div class="dev-section">
+        <div class="section-label">🛠 Dev</div>
+        <div class="flex gap-8">
+          <input v-model="testName" placeholder="Имя тестового юзера" class="input" style="flex:1;padding:10px 12px;font-size:0.875rem" />
+          <button class="btn btn-ghost btn-sm" @click="handleTestLogin">Войти</button>
         </div>
       </div>
-
-      <div class="dev-login">
-        <p>🛠 Dev Tools</p>
-        <input v-model="testName" placeholder="Имя тестового юзера" class="dev-input" />
-        <button @click="handleTestLogin" class="dev-btn">Войти без ТГ</button>
-      </div>
-
-      <footer class="login-footer">
-        <p>Это безопасно. Мы получим только ваше имя и аватар.</p>
-      </footer>
     </div>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { API_URL } from '../config';
 
-const router = useRouter(); // Инициализируем роутер для переходов
+const router = useRouter();
 const loginToken = ref('');
 const status = ref('pending');
+const testName = ref('');
 const tgLink = computed(() => `https://t.me/datingTesting_bot?start=${loginToken.value}`);
-let pollInterval: any = null;
+let pollInterval: ReturnType<typeof setInterval> | null = null;
 
-// 1. Получаем уникальный код от бэкенда
-const getCode = async () => {
+async function getCode() {
   status.value = 'pending';
   loginToken.value = '';
   try {
@@ -63,195 +69,118 @@ const getCode = async () => {
     const data = await res.json();
     loginToken.value = data.token;
     startPolling();
-  } catch (e) {
-    console.error('Ошибка при генерации кода:', e);
-  }
-};
+  } catch { /* ignore */ }
+}
 
-// 2. Опрос бэкенда (ждём, пока юзер нажмет Start в боте)
-const startPolling = () => {
+function startPolling() {
   if (pollInterval) clearInterval(pollInterval);
-  
   pollInterval = setInterval(async () => {
     try {
       const res = await fetch(`${API_URL}/auth/status?token=${loginToken.value}`);
       const data = await res.json();
-
       if (data.status === 'authenticated') {
-        clearInterval(pollInterval);
-        status.value = 'success';
-        
-        // Сохраняем токен
+        clearInterval(pollInterval!);
         localStorage.setItem('token', data.jwt);
-        localStorage.setItem('userId', data.user.id);
-        
-        // МАГИЯ: Автоматически перекидываем на анбординг
-        router.push('/onboarding'); 
+        localStorage.setItem('userId', String(data.user.id));
+        router.push('/onboarding');
       } else if (data.status === 'expired') {
-        clearInterval(pollInterval);
+        clearInterval(pollInterval!);
         status.value = 'expired';
       }
-    } catch (e) {
-      console.error('Ошибка опроса:', e);
-    }
-  }, 1500); // Опрашиваем чуть реже, чтобы не спамить (раз в 1.5 сек)
-};
+    } catch { /* ignore */ }
+  }, 1500);
+}
 
-onMounted(getCode);
-onUnmounted(() => {
-  if (pollInterval) clearInterval(pollInterval);
-});
-
-const testName = ref('');
-
-const handleTestLogin = async () => {
+async function handleTestLogin() {
   if (!testName.value) return;
   try {
     const res = await fetch(`${API_URL}/users/test-login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: testName.value })
+      body: JSON.stringify({ name: testName.value }),
     });
     const data = await res.json();
-    
-    // Сохраняем ID и токен
     localStorage.setItem('token', data.token);
-    localStorage.setItem('userId', data.user.id);
-    
-    // Если интересов нет — на анбординг, если есть — в дашборд
-    if (!data.user.interests || data.user.interests.length === 0) {
-      router.push('/onboarding');
-    } else {
-      router.push('/dashboard');
-    }
-  } catch (e) {
-    console.error('Ошибка dev-логина:', e);
-  }
-};
+    localStorage.setItem('userId', String(data.user.id));
+    router.push(!data.user.interests?.length ? '/onboarding' : '/dashboard');
+  } catch { /* ignore */ }
+}
 
+onMounted(getCode);
+onUnmounted(() => { if (pollInterval) clearInterval(pollInterval); });
 </script>
 
 <style scoped>
-.login-wrapper {
+.login-page {
+  min-height: 100dvh;
   display: flex;
-  justify-content: center;
   align-items: center;
-  min-height: 80vh; /* Чуть выше центра */
-}
-
-.glass-card {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(15px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 32px; /* Очень скругленные углы для безопасности */
-  padding: 40px;
-  width: 100%;
-  max-width: 400px;
-  text-align: center;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.05);
-}
-
-.huge-title {
-  font-size: 32px;
-  font-weight: 800;
-  margin-bottom: 12px;
-  color: #2d3436;
-}
-
-.subtitle {
-  color: #636e72;
-  font-size: 16px;
-  line-height: 1.5;
-  margin-bottom: 32px;
-}
-
-.tg-button {
-  display: block;
-  background: #7c9aff; /* Наш основной спокойный синий */
-  color: white;
+  justify-content: center;
   padding: 20px;
-  border-radius: 20px;
-  text-decoration: none;
-  font-weight: 700;
-  font-size: 18px;
-  transition: all 0.3s ease;
-  box-shadow: 0 10px 20px rgba(124, 154, 255, 0.2);
+  background: var(--bg);
 }
 
-.tg-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 15px 25px rgba(124, 154, 255, 0.3);
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 36px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
-.status-msg {
-  margin-top: 24px;
-  color: #b2bec3;
-  font-size: 14px;
+.login-hero {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.hero-emoji { font-size: 3.5rem; line-height: 1; }
+.login-hero h1 { font-size: 2rem; font-weight: 800; color: var(--primary); margin: 0; }
+.login-hero p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; max-width: 260px; }
+
+.auth-block { display: flex; flex-direction: column; gap: 12px; }
+
+.status-row {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
 }
-
-.login-footer {
-  margin-top: 32px;
-  font-size: 12px;
-  color: #b2bec3;
-}
-
-.retry-btn {
-  background: #f0f2f5;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 12px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-/* Анимация загрузки */
-.loader {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #7c9aff;
+.mini-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--surface-2);
+  border-top-color: var(--primary);
   border-radius: 50%;
-  display: inline-block;
-  animation: spin 1s infinite linear;
-  margin-bottom: 16px;
+  animation: spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.flex-col { display: flex; flex-direction: column; }
+.flex { display: flex; }
+.gap-8 { gap: 8px; }
+.gap-12 { gap: 12px; }
+.gap-16 { gap: 16px; }
+.text-center { text-align: center; }
+
+.safety-note {
+  font-size: 0.75rem;
+  color: var(--text-light);
+  text-align: center;
+  margin: 0;
 }
 
-.loader-small {
-  width: 12px;
-  height: 12px;
-  border: 2px solid #eee;
-  border-top: 2px solid #7c9aff;
-  border-radius: 50%;
-  display: inline-block;
-  animation: spin 1s infinite linear;
-}
-
-.dev-login {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px dashed #ccc;
-}
-.dev-login p { font-size: 12px; color: #aaa; margin-bottom: 8px; }
-.dev-input {
-  padding: 8px;
-  border-radius: 8px;
-  border: 1px solid #ddd;
-  margin-right: 8px;
-}
-.dev-btn {
-  padding: 8px 12px;
-  background: #333;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.dev-section {
+  border-top: 1px dashed #EDE8E5;
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 </style>

@@ -61,6 +61,29 @@ export class QuestsController {
     return match ? { hasActiveMatch: true, matchId: match.id } : { hasActiveMatch: false };
   }
 
+  @Post('match/:id/propose-date')
+  async proposeDate(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: { proposedDate: string }
+  ) {
+    const matchId = parseInt(id);
+    if (isNaN(matchId)) throw new NotFoundException('Invalid Match ID');
+    return this.questsService.proposeDate(matchId, req.user.id, new Date(body.proposedDate));
+  }
+
+  @Post('match/:id/confirm-date')
+  async confirmDate(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: { accept: boolean; counterDate?: string }
+  ) {
+    const matchId = parseInt(id);
+    if (isNaN(matchId)) throw new NotFoundException('Invalid Match ID');
+    const counterDate = body.counterDate ? new Date(body.counterDate) : undefined;
+    return this.questsService.confirmDate(matchId, req.user.id, body.accept, counterDate);
+  }
+
   @Post('match/:id/status')
   async updateMatchStatus(
     @Request() req: any,

@@ -1,433 +1,474 @@
 <template>
-  <div class="onboarding-container">
-    <div class="glass-card">
-      
-      <!-- ШАГ 0: Обучающий экран -->
-      <div v-if="currentStep === 0" class="step-fade">
-        <div class="welcome-icon">🎯</div>
-        <h1 class="huge-title">Добро пожаловать в&nbsp;Quests!</h1>
-        <p class="welcome-lead">Это не знакомства. Это поиск приятеля на конкретное занятие.</p>
-        
-        <div class="rules-list">
-          <div class="rule-item">
-            <span class="rule-emoji">1️⃣</span>
-            <p>Ты выбираешь интересы и время, когда свободен.</p>
-          </div>
-          <div class="rule-item">
-            <span class="rule-emoji">2️⃣</span>
-            <p>Мы находим тебе напарника, который хочет того же.</p>
-          </div>
-          <div class="rule-item">
-            <span class="rule-emoji">3️⃣</span>
-            <p>Встреча состоялась? Отметь «Всё супер!» — и репутация растёт.</p>
-          </div>
-        </div>
+  <div class="page onboarding">
 
-        <div class="warning-block">
-          <h4>⚠️ Важно — правила платформы:</h4>
-          <ul>
-            <li>Одновременно может быть только <strong>один активный метч</strong> — чтобы не подводить людей.</li>
-            <li>Если ты пропустил встречу без отмены — <strong>репутация упадёт</strong>.</li>
-            <li>Репутация ниже 2.0 → <strong>бан на 30 дней</strong>. Мы относимся к чужому времени серьёзно.</li>
-          </ul>
-          <p class="warning-note">Это не страшно — просто будь честным. Если не можешь — отмени заранее.</p>
-        </div>
+    <!-- Прогресс -->
+    <div class="ob-progress">
+      <div class="ob-progress__steps">
+        <div
+          v-for="i in totalSteps"
+          :key="i"
+          class="ob-progress__dot"
+          :class="{ active: i - 1 === step, done: i - 1 < step }"
+        />
       </div>
-
-      <!-- ШАГ 1: Выбор категорий -->
-      <div v-if="currentStep === 1" class="step-fade">
-        <h1 class="huge-title">С чего начнем?</h1>
-        <p class="subtitle">Выбери основные направления (можно несколько)</p>
-        
-        <div class="spotify-grid">
-          <div 
-            v-for="(val, groupKey) in categories" 
-            :key="groupKey"
-            :class="['spotify-card', { active: selectedGroups.includes(groupKey as string) }]"
-            :style="{ background: val.color }"
-            @click="toggleGroup(groupKey as string)"
-          >
-            <span class="card-label">{{ val.title }}</span>
-            <div class="card-check" v-if="selectedGroups.includes(groupKey as string)">✓</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ШАГ 2: Детали интересов -->
-      <div v-if="currentStep === 2" class="step-fade">
-        <h1 class="huge-title">Уточним детали</h1>
-        <p class="subtitle">Что именно тебя интересует в этих сферах?</p>
-        
-        <div class="details-stack">
-          <div v-for="groupKey in selectedGroups" :key="groupKey" class="detail-section">
-            <h3 class="section-title">{{ categories[groupKey].title }}</h3>
-            <div class="chips-wrap">
-              <button 
-                v-for="item in categories[groupKey].items" 
-                :key="item.id"
-                :class="['modern-chip', { active: selectedInterests.includes(item.id) }]"
-                @click="toggleInterest(item.id)"
-              >
-                {{ item.label }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ШАГ 3: Выбор времени -->
-      <div v-if="currentStep === 3" class="step-fade">
-        <h1 class="huge-title">Когда ты свободен?</h1>
-        <p class="subtitle">Укажи дни и время — мы будем искать напарников под твоё расписание</p>
-        
-        <SlotPicker v-model="timeSlots" title="" />
-      </div>
-
-      <footer class="onboarding-footer">
-        <button v-if="currentStep > 0" class="secondary-btn" @click="currentStep--">
-          Назад
-        </button>
-        <button 
-          class="primary-btn" 
-          :disabled="isNextDisabled"
-          @click="handleNext"
-        >
-          {{ stepButtonLabel }}
-        </button>
-      </footer>
     </div>
+
+    <!-- ШАГ 0: Фото -->
+    <div v-if="step === 0" class="ob-step anim-fade-up">
+      <h1>Твоё фото</h1>
+      <p>Первое впечатление важно — загрузи реальное фото 😊</p>
+
+      <div class="photo-upload" @click="triggerPhotoInput">
+        <img v-if="photoPreview" :src="photoPreview" class="photo-upload__img" />
+        <div v-else class="photo-upload__placeholder">
+          <span class="photo-upload__icon">📷</span>
+          <span>Нажми, чтобы добавить фото</span>
+        </div>
+        <input ref="photoInput" type="file" accept="image/*" class="hidden" @change="onPhotoSelected" />
+      </div>
+
+      <button class="btn btn-primary btn-full" :disabled="!photoPreview" @click="step++">
+        Продолжить →
+      </button>
+      <button class="btn btn-ghost btn-full" @click="step++">Пропустить</button>
+    </div>
+
+    <!-- ШАГ 1: Данные -->
+    <div v-if="step === 1" class="ob-step anim-fade-up">
+      <h1>О тебе</h1>
+      <p>Партнёры увидят это только после подтверждённой встречи</p>
+
+      <div class="field-group">
+        <label class="input-label">Имя</label>
+        <input class="input" v-model="form.firstName" placeholder="Как тебя зовут?" maxlength="30" />
+      </div>
+
+      <div class="field-group">
+        <label class="input-label">Возраст</label>
+        <div class="age-slider-wrap">
+          <span class="age-value">{{ form.age }} лет</span>
+          <input type="range" min="16" max="60" v-model.number="form.age" class="age-slider" />
+          <div class="age-range-labels"><span>16</span><span>60</span></div>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="input-label">Пол</label>
+        <div class="gender-btns">
+          <button
+            v-for="g in genders"
+            :key="g.value"
+            class="gender-btn"
+            :class="{ active: form.gender === g.value }"
+            @click="form.gender = g.value"
+          >{{ g.emoji }} {{ g.label }}</button>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="input-label">Город</label>
+        <input class="input" v-model="form.city" placeholder="Москва, Санкт-Петербург..." maxlength="50" />
+      </div>
+
+      <button class="btn btn-primary btn-full" :disabled="!form.firstName || !form.gender" @click="step++">
+        Продолжить →
+      </button>
+    </div>
+
+    <!-- ШАГ 2: О себе -->
+    <div v-if="step === 2" class="ob-step anim-fade-up">
+      <h1>Пара слов о себе</h1>
+      <p>Необязательно, но поможет найти близкого по духу человека</p>
+
+      <textarea
+        class="input bio-input"
+        v-model="form.bio"
+        placeholder="Люблю кино, настолки, не люблю скуку..."
+        maxlength="200"
+        rows="4"
+      />
+      <div class="text-xs text-muted text-center">{{ form.bio.length }}/200</div>
+
+      <button class="btn btn-primary btn-full" @click="step++">Продолжить →</button>
+      <button class="btn btn-ghost btn-full" @click="step++">Пропустить</button>
+    </div>
+
+    <!-- ШАГ 3: Интересы -->
+    <div v-if="step === 3" class="ob-step anim-fade-up">
+      <h1>Твои интересы</h1>
+      <p>Выбери хотя бы 2 — они влияют на подбор событий</p>
+
+      <div v-for="group in interestGroups" :key="group.key" class="interest-group">
+        <div class="section-label">{{ group.emoji }} {{ group.label }}</div>
+        <div class="chips-wrap">
+          <button
+            v-for="item in group.items"
+            :key="item.id"
+            class="chip"
+            :class="selectedInterests.includes(item.id) ? 'chip-active' : 'chip-default'"
+            @click="toggleInterest(item.id)"
+          >{{ item.emoji }} {{ item.label }}</button>
+        </div>
+      </div>
+
+      <button
+        class="btn btn-primary btn-full"
+        :disabled="selectedInterests.length < 2"
+        @click="step++"
+      >
+        Продолжить → ({{ selectedInterests.length }} выбрано)
+      </button>
+    </div>
+
+    <!-- ШАГ 4: Фильтры партнёра -->
+    <div v-if="step === 4" class="ob-step anim-fade-up">
+      <h1>Кого ищешь?</h1>
+      <p>Настрой, с кем хочешь ходить на события</p>
+
+      <div class="field-group">
+        <label class="input-label">Пол партнёра</label>
+        <div class="gender-btns">
+          <button
+            v-for="g in prefGenders"
+            :key="g.value"
+            class="gender-btn"
+            :class="{ active: form.prefGender === g.value }"
+            @click="form.prefGender = g.value"
+          >{{ g.emoji }} {{ g.label }}</button>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="input-label">Возраст: {{ form.prefAgeMin }}–{{ form.prefAgeMax }} лет</label>
+        <div class="age-range-row">
+          <div class="age-range-item">
+            <span class="text-xs text-muted">От {{ form.prefAgeMin }}</span>
+            <input type="range" min="16" max="60" v-model.number="form.prefAgeMin" class="age-slider" />
+          </div>
+          <div class="age-range-item">
+            <span class="text-xs text-muted">До {{ form.prefAgeMax }}</span>
+            <input type="range" min="16" max="60" v-model.number="form.prefAgeMax" class="age-slider" />
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-full" :disabled="!form.prefGender" @click="step++">
+        Продолжить →
+      </button>
+    </div>
+
+    <!-- ШАГ 5: Правила -->
+    <div v-if="step === 5" class="ob-step anim-fade-up">
+      <div class="rules-header">
+        <div class="rules-icon">🤝</div>
+        <h1>Правила сервиса</h1>
+        <p>Безопасные и комфортные встречи — наш приоритет</p>
+      </div>
+
+      <div class="rules-list">
+        <div class="rule-item" v-for="rule in rules" :key="rule.title">
+          <span class="rule-emoji">{{ rule.emoji }}</span>
+          <div>
+            <div class="rule-title">{{ rule.title }}</div>
+            <div class="text-sm text-muted">{{ rule.text }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="payment-rule card card-sm">
+        <div class="flex items-center gap-8">
+          <span style="font-size:1.5rem">💰</span>
+          <div>
+            <div class="font-bold">Правило оплаты</div>
+            <div class="text-sm text-muted">По умолчанию всё 50/50. Если хочется иначе — обсудите в чате.</div>
+          </div>
+        </div>
+        <div class="payment-badge" style="margin-top:10px;align-self:flex-start">🤝 50/50</div>
+      </div>
+
+      <button class="btn btn-primary btn-full" @click="step++">Всё понятно, поехали!</button>
+    </div>
+
+    <!-- ШАГ 6: Видео-верификация -->
+    <div v-if="step === 6" class="ob-step anim-fade-up">
+      <h1>Видео-верификация</h1>
+      <p>5–10 секунд записи подтверждают, что ты реальный человек. Видео видят только модераторы.</p>
+
+      <VideoRecorder @recorded="onVideoRecorded" />
+
+      <div v-if="videoRecorded" class="badge badge-success" style="align-self:center">
+        ✅ Видео отправлено на проверку
+      </div>
+
+      <button class="btn btn-primary btn-full" @click="finish" :disabled="saving">
+        {{ saving ? 'Сохранение...' : 'Завершить →' }}
+      </button>
+      <button class="btn btn-ghost btn-full" @click="finish">Пропустить</button>
+    </div>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { API_URL } from '../config';
-import SlotPicker from './SlotPicker.vue';
+import VideoRecorder from './VideoRecorder.vue';
 
-const currentStep = ref(0);
-const selectedGroups = ref<string[]>([]);
-const selectedInterests = ref<string[]>([]);
-const timeSlots = ref<{ dayOfWeek: number; timeFrom: string; timeTo: string }[]>([]);
 const router = useRouter();
+const step = ref(0);
+const totalSteps = 7;
+const saving = ref(false);
+const videoRecorded = ref(false);
 
-const categories: any = {
-  offline: {
-    title: '📍 Оффлайн',
-    color: 'linear-gradient(135deg, #FF6B6B, #FF8E53)',
-    items: [
-      { id: 'hookah', label: '💨 Кальян' }, { id: 'bar', label: '🍻 Бар' },
-      { id: 'sport', label: '⚽ Спорт' }, { id: 'movie_theatre', label: '🍿 Кино' },
-      { id: 'picnic', label: '🌳 Прогулка' }
-    ]
-  },
-  games: {
-    title: '🎮 Игры',
-    color: 'linear-gradient(135deg, #4facfe, #00f2fe)',
-    items: [
-      { id: 'dota', label: '⚔️ Dota 2' }, { id: 'cs', label: '🔫 CS 2' },
-      { id: 'mc', label: '⛏️ Minecraft' }, { id: 'wow', label: '🐉 WoW' },
-      { id: 'itt', label: '👫 It Takes Two' }, { id: 'split', label: '🎮 Split Screen' }
-    ]
-  },
-  online: {
-    title: '💻 Онлайн',
-    color: 'linear-gradient(135deg, #a18cd1, #fbc2eb)',
-    items: [
-      { id: 'movie_online', label: '🎬 Кино' }, { id: 'series', label: '📺 Сериалы' },
-      { id: 'chatting', label: '💬 Just Chatting' }
-    ]
-  }
-};
-
-const toggleGroup = (key: string) => {
-  if (selectedGroups.value.includes(key)) {
-    selectedGroups.value = selectedGroups.value.filter(k => k !== key);
-  } else {
-    selectedGroups.value.push(key);
-  }
-};
-
-const toggleInterest = (id: string) => {
-  if (selectedInterests.value.includes(id)) {
-    selectedInterests.value = selectedInterests.value.filter(i => i !== id);
-  } else {
-    selectedInterests.value.push(id);
-  }
-};
-
-const isNextDisabled = computed(() => {
-  if (currentStep.value === 0) return false;
-  if (currentStep.value === 1) return selectedGroups.value.length === 0;
-  if (currentStep.value === 2) return selectedInterests.value.length < 2;
-  if (currentStep.value === 3) return timeSlots.value.length === 0;
-  return false;
+const form = ref({
+  firstName: '',
+  age: 25,
+  gender: '',
+  city: '',
+  bio: '',
+  prefGender: '',
+  prefAgeMin: 18,
+  prefAgeMax: 40,
+  photoUrl: '',
 });
 
-const stepButtonLabel = computed(() => {
-  if (currentStep.value === 0) return 'Понятно, поехали! 🚀';
-  if (currentStep.value === 3) return 'Готово';
-  return 'Далее';
-});
+const selectedInterests = ref<string[]>([]);
+const photoInput = ref<HTMLInputElement>();
+const photoPreview = ref('');
 
-const handleNext = async () => {
-  if (currentStep.value < 3) {
-    currentStep.value++;
-    return;
-  }
+function triggerPhotoInput() {
+  photoInput.value?.click();
+}
 
-  // Финальный шаг — сохраняем всё
+function onPhotoSelected(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    photoPreview.value = reader.result as string;
+    form.value.photoUrl = reader.result as string;
+  };
+  reader.readAsDataURL(file);
+}
+
+const interestGroups = [
+  {
+    key: 'offline', emoji: '🌍', label: 'Активности',
+    items: [
+      { id: 'hookah', emoji: '💨', label: 'Кальян' },
+      { id: 'bar', emoji: '🍺', label: 'Бар' },
+      { id: 'sport', emoji: '⚽', label: 'Спорт' },
+      { id: 'movie_theatre', emoji: '🎬', label: 'Кино' },
+      { id: 'picnic', emoji: '🧺', label: 'Пикник' },
+      { id: 'bowling', emoji: '🎳', label: 'Боулинг' },
+    ]
+  },
+  {
+    key: 'games', emoji: '🎮', label: 'Игры',
+    items: [
+      { id: 'dota', emoji: '⚔️', label: 'Dota 2' },
+      { id: 'cs', emoji: '🔫', label: 'CS2' },
+      { id: 'mc', emoji: '⛏️', label: 'Minecraft' },
+      { id: 'wow', emoji: '🐉', label: 'WoW' },
+      { id: 'itt', emoji: '🃏', label: 'Настолки' },
+      { id: 'split', emoji: '🎭', label: 'Splitgate' },
+    ]
+  },
+  {
+    key: 'online', emoji: '📱', label: 'Онлайн',
+    items: [
+      { id: 'movie_online', emoji: '🍿', label: 'Смотреть кино' },
+      { id: 'series', emoji: '📺', label: 'Сериалы' },
+      { id: 'chatting', emoji: '💬', label: 'Поболтать' },
+    ]
+  },
+];
+
+function toggleInterest(id: string) {
+  const idx = selectedInterests.value.indexOf(id);
+  if (idx === -1) selectedInterests.value.push(id);
+  else selectedInterests.value.splice(idx, 1);
+}
+
+const genders = [
+  { value: 'male', emoji: '👦', label: 'Парень' },
+  { value: 'female', emoji: '👧', label: 'Девушка' },
+  { value: 'other', emoji: '🌈', label: 'Другое' },
+];
+const prefGenders = [
+  { value: 'any', emoji: '🌟', label: 'Любой' },
+  { value: 'male', emoji: '👦', label: 'Парень' },
+  { value: 'female', emoji: '👧', label: 'Девушка' },
+];
+
+const rules = [
+  { emoji: '🎯', title: 'Один матч за раз', text: 'Нельзя иметь несколько активных встреч одновременно.' },
+  { emoji: '🤝', title: 'Не сливайся', text: 'Отмена матчей снижает рейтинг. Много отмен — временный бан.' },
+  { emoji: '🔒', title: 'Безопасность', text: 'Контакты не передаются до встречи. Только чат внутри сервиса.' },
+  { emoji: '😊', title: 'Уважение', text: 'Это просто знакомство и совместный досуг. Без давления.' },
+];
+
+function onVideoRecorded(videoUrl: string) {
+  videoRecorded.value = true;
   const token = localStorage.getItem('token');
-  if (!token) {
-    alert('Ошибка: сессия не найдена.');
-    router.push('/');
-    return;
-  }
+  if (!token) return;
+  fetch(`${API_URL}/users/video`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ videoUrl }),
+  });
+}
 
-  try {
-    // Сохраняем интересы
-    const resInterests = await fetch(`${API_URL}/users/interests`, {
+async function finish() {
+  saving.value = true;
+  const token = localStorage.getItem('token');
+  if (!token) { router.push('/'); return; }
+
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  await fetch(`${API_URL}/users/profile`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({
+      firstName: form.value.firstName || undefined,
+      age: form.value.age,
+      gender: form.value.gender || undefined,
+      city: form.value.city || undefined,
+      bio: form.value.bio || undefined,
+      photoUrl: form.value.photoUrl || undefined,
+      prefGender: form.value.prefGender || undefined,
+      prefAgeMin: form.value.prefAgeMin,
+      prefAgeMax: form.value.prefAgeMax,
+    }),
+  });
+
+  if (selectedInterests.value.length > 0) {
+    await fetch(`${API_URL}/users/interests`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      headers,
       body: JSON.stringify({ interests: selectedInterests.value }),
     });
-
-    // Сохраняем слоты
-    const resSlots = await fetch(`${API_URL}/users/slots`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ slots: timeSlots.value }),
-    });
-
-    if (resInterests.ok && resSlots.ok) {
-      router.push('/dashboard'); 
-    } else {
-      alert('Не удалось сохранить данные. Попробуйте позже.');
-    }
-  } catch (e) {
-    console.error('Ошибка при сохранении:', e);
-    alert('Проблема с соединением');
   }
-};
+
+  saving.value = false;
+  router.push('/dashboard');
+}
 </script>
 
 <style scoped>
-.onboarding-container {
+.onboarding {
+  background: var(--bg);
+  padding-bottom: 40px;
+}
+
+.ob-progress {
+  padding: 16px 20px 0;
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 5;
+}
+.ob-progress__steps {
   display: flex;
+  gap: 6px;
   justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  padding: 24px;
+  padding-bottom: 16px;
 }
+.ob-progress__dot {
+  height: 6px;
+  flex: 1;
+  max-width: 48px;
+  border-radius: 100px;
+  background: var(--surface-2);
+  transition: background 0.3s;
+}
+.ob-progress__dot.done   { background: var(--primary-soft); }
+.ob-progress__dot.active { background: var(--primary); }
 
-.glass-card {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px);
-  border-radius: 32px;
-  padding: 48px;
-  width: 100%;
-  max-width: 600px;
-  box-shadow: 0 30px 60px rgba(0,0,0,0.08);
-}
-
-/* Шаг 0: Добро пожаловать */
-.welcome-icon {
-  font-size: 56px;
-  margin-bottom: 16px;
-}
-.welcome-lead {
-  font-size: 18px;
-  color: #555;
-  margin-bottom: 32px;
-  line-height: 1.5;
-}
-
-.rules-list {
+.ob-step {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  margin-bottom: 28px;
+  gap: 20px;
+  padding: 24px 20px;
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
 }
+.ob-step h1 { margin-bottom: -8px; }
+
+.photo-upload {
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  border: 3px dashed var(--primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  align-self: center;
+}
+.photo-upload__img { width: 100%; height: 100%; object-fit: cover; }
+.photo-upload__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 20px;
+}
+.photo-upload__icon { font-size: 2.5rem; }
+.hidden { display: none; }
+
+.age-slider-wrap { display: flex; flex-direction: column; gap: 8px; }
+.age-value { font-size: 1.5rem; font-weight: 800; color: var(--primary); text-align: center; }
+.age-slider { width: 100%; accent-color: var(--primary); cursor: pointer; }
+.age-range-labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); }
+.age-range-row { display: flex; flex-direction: column; gap: 12px; }
+.age-range-item { display: flex; flex-direction: column; gap: 4px; }
+
+.gender-btns { display: flex; gap: 10px; }
+.gender-btn {
+  flex: 1;
+  padding: 12px 8px;
+  border-radius: var(--radius-sm);
+  border: 2px solid #EDE8E5;
+  background: var(--surface);
+  font-family: var(--font);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--text-muted);
+}
+.gender-btn.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.interest-group { display: flex; flex-direction: column; gap: 8px; }
+.chips-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+.field-group { display: flex; flex-direction: column; gap: 8px; }
+.bio-input { resize: none; }
+
+.rules-header { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.rules-icon { font-size: 3rem; }
+.rules-list { display: flex; flex-direction: column; gap: 12px; }
 .rule-item {
   display: flex;
+  gap: 14px;
   align-items: flex-start;
-  gap: 12px;
-  background: #f8f9fc;
-  padding: 16px;
-  border-radius: 16px;
+  background: var(--surface);
+  padding: 14px;
+  border-radius: var(--radius-sm);
 }
-.rule-emoji {
-  font-size: 20px;
-  flex-shrink: 0;
-}
-.rule-item p {
-  margin: 0;
-  font-size: 15px;
-  color: #333;
-  line-height: 1.4;
-}
-
-.warning-block {
-  background: linear-gradient(135deg, #fff8e1, #fff3cd);
-  border-radius: 20px;
-  padding: 20px 24px;
-  border-left: 4px solid #ffb300;
-}
-.warning-block h4 {
-  margin: 0 0 12px;
-  font-size: 15px;
-  color: #1d1d1f;
-}
-.warning-block ul {
-  margin: 0;
-  padding-left: 20px;
-}
-.warning-block li {
-  font-size: 14px;
-  color: #555;
-  line-height: 1.6;
-}
-.warning-note {
-  margin: 12px 0 0;
-  font-size: 13px;
-  color: #888;
-  font-style: italic;
-}
-
-/* Общие стили заголовков */
-.huge-title { 
-  font-size: 36px; 
-  font-weight: 800; 
-  color: #1d1d1f; 
-  margin-bottom: 12px; 
-  letter-spacing: -1px; 
-}
-
-.subtitle { color: #86868b; font-size: 18px; margin-bottom: 40px; }
-
-/* Сетка категорий */
-.spotify-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
-}
-
-.spotify-card {
-  height: 160px;
-  border-radius: 24px;
-  padding: 24px;
-  color: white;
-  cursor: pointer;
-  position: relative;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  align-items: flex-end;
-}
-
-.spotify-card:hover {
-  transform: translateY(-5px) scale(1.02);
-  box-shadow: 0 15px 30px rgba(0,0,0,0.15);
-}
-
-.spotify-card:active { transform: scale(0.98); }
-
-.spotify-card.active {
-  box-shadow: 0 0 0 4px #7c9aff;
-}
-
-.card-label { font-size: 22px; font-weight: 800; }
-
-.card-check {
-  position: absolute;
-  top: 16px; right: 16px;
-  background: white; color: black;
-  width: 32px; height: 32px;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: bold;
-}
-
-.details-stack { display: flex; flex-direction: column; gap: 32px; }
-.section-title { font-size: 14px; text-transform: uppercase; color: #86868b; font-weight: 700; letter-spacing: 1.2px; }
-
-.chips-wrap { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
-
-.modern-chip {
-  padding: 14px 24px;
-  border-radius: 100px;
-  border: 2px solid #f2f2f7;
-  background: white;
-  font-weight: 600;
-  font-size: 16px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.modern-chip:hover {
-  background: #f2f2f7;
-  border-color: #e5e5ea;
-}
-
-.modern-chip.active {
-  background: #1d1d1f;
-  color: white;
-  border-color: #1d1d1f;
-  transform: scale(1.05);
-}
-
-.onboarding-footer {
-  margin-top: 50px;
-  display: flex;
-  gap: 16px;
-}
-
-.primary-btn {
-  flex: 2;
-  padding: 20px;
-  border-radius: 20px;
-  background: #4a6fff;
-  color: white;
-  border: none;
-  font-weight: 800;
-  font-size: 18px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 10px 25px rgba(74, 111, 255, 0.25);
-}
-
-.primary-btn:hover:not(:disabled) {
-  background: #365cf5;
-  transform: translateY(-2px);
-  box-shadow: 0 15px 30px rgba(74, 111, 255, 0.35);
-}
-
-.primary-btn:disabled {
-  background: #e5e5ea;
-  color: #aeaeb2;
-  box-shadow: none;
-  cursor: not-allowed;
-}
-
-.secondary-btn {
-  flex: 1;
-  padding: 20px;
-  border-radius: 20px;
-  background: #f2f2f7;
-  border: none;
-  font-weight: 700;
-  color: #1d1d1f;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.secondary-btn:hover { background: #e5e5ea; }
-
-.step-fade {
-  animation: fadeIn 0.4s ease-out;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+.rule-emoji { font-size: 1.5rem; flex-shrink: 0; }
+.rule-title { font-weight: 700; margin-bottom: 2px; }
+.payment-rule { display: flex; flex-direction: column; }
 </style>

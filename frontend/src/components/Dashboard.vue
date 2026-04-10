@@ -1,54 +1,106 @@
 <template>
-  <div class="feed-container">
-    <!-- Экран бана -->
-    <div v-if="isBanned" class="ban-screen">
-      <div class="ban-card">
-        <div class="ban-icon">🚫</div>
-        <h2>Доступ ограничен</h2>
-        <p>Твоя репутация слишком низкая. Ты временно не можешь искать напарников.</p>
-        <p class="ban-date">Разблокировка: <strong>{{ banDateFormatted }}</strong></p>
-        <button @click="logout" class="logout-btn-big">Выйти</button>
+  <div class="page dashboard">
+
+    <!-- Шапка -->
+    <header class="app-header">
+      <div class="app-header__logo">🌟 Meetup</div>
+      <div class="app-header__actions">
+        <button class="icon-btn" @click="showFilters = true" title="Фильтры">🔍</button>
+        <button class="icon-btn" @click="$router.push('/history')" title="История">📋</button>
+        <button class="icon-btn" @click="$router.push('/settings')" title="Настройки">⚙️</button>
+        <button class="icon-btn" @click="logout" title="Выйти">👋</button>
       </div>
+    </header>
+
+    <!-- Бан-экран -->
+    <div v-if="isBanned" class="ban-screen page-content anim-fade-up">
+      <div class="ban-icon">🚫</div>
+      <h2>Временный бан</h2>
+      <p>Твой аккаунт заблокирован до {{ banDateFormatted }} из-за низкого рейтинга.</p>
+      <p class="text-sm">Постарайся не пропускать договорённые встречи — это влияет на рейтинг.</p>
     </div>
 
-    <!-- Основной интерфейс -->
+    <!-- Основная лента -->
     <template v-else>
-      <div class="cards-stack">
-        <QuestCard 
-          v-for="(quest, index) in quests" 
-          :key="quest.id"
-          v-show="index === quests.length - 1" 
-          :quest="quest"
-          @swipeRight="onLike"
-          @swipeLeft="onNope"
-        />
-        
-        <div v-if="quests.length === 0" class="empty-state">
-          <h2>Задания закончились! 🏁</h2>
-          <p>Заходи позже, мы подберем что-нибудь еще.</p>
-          <button @click="loadQuests" class="retry-btn">Обновить</button>
+      <div class="cards-area">
+        <div v-if="loading" class="empty-state anim-fade-in">
+          <div class="loading-spinner">🌀</div>
+          <p>Загружаем события...</p>
+        </div>
+
+        <div v-else-if="quests.length === 0" class="empty-state anim-fade-in">
+          <div style="font-size:3rem">🎉</div>
+          <h3>Пока событий нет</h3>
+          <p>Попробуй изменить фильтры или загляни чуть позже</p>
+          <button class="btn btn-outline btn-sm" @click="loadQuests">Обновить</button>
+        </div>
+
+        <div v-else class="cards-stack">
+          <QuestCard
+            v-for="(quest, index) in quests"
+            :key="quest.id"
+            :quest="quest"
+            v-show="index === quests.length - 1"
+            @swipeRight="onLike(quest.id)"
+            @swipeLeft="onNope(quest.id)"
+          />
+        </div>
+
+        <!-- Подсказки свайпа -->
+        <div v-if="quests.length > 0" class="swipe-hints">
+          <div class="swipe-hint">
+            <span>👈</span>
+            <span class="text-xs text-muted">Не сейчас</span>
+          </div>
+          <div class="swipe-hint">
+            <span class="text-xs text-muted">Пойду!</span>
+            <span>👉</span>
+          </div>
         </div>
       </div>
-      
-      <header class="dashboard-header">
-        <div class="logo">🔥 Quests</div>
-        <div class="header-actions">
-          <button @click="$router.push('/history')" class="icon-btn" title="История">📋</button>
-          <button @click="$router.push('/settings')" class="icon-btn" title="Настройки">⚙️</button>
-          <button @click="logout" class="logout-btn">Выйти</button>
-        </div>
-      </header>
 
-      <!-- Модалка выбора слотов -->
-      <MatchSlotSelector
-        :visible="slotSelectorVisible"
-        :hostSlots="pendingSlots"
-        :lobbyId="pendingLobbyId"
-        :questId="pendingQuestId"
-        @confirm="onSlotConfirm"
-        @decline="onSlotDecline"
-      />
+      <!-- Кнопки под стопкой -->
+      <div v-if="quests.length > 0" class="action-btns">
+        <button class="action-btn action-btn--nope" @click="onNope(quests[quests.length - 1]?.id)">✕</button>
+        <button class="action-btn action-btn--like" @click="onLike(quests[quests.length - 1]?.id)">✓</button>
+      </div>
     </template>
+
+    <!-- Фильтры (дровер) -->
+    <Teleport to="body">
+      <div v-if="showFilters" class="overlay" @click="showFilters = false">
+        <div class="filter-drawer anim-scale-in" @click.stop>
+          <div class="filter-drawer__header">
+            <h3>Фильтры</h3>
+            <button class="icon-btn" @click="showFilters = false">✕</button>
+          </div>
+
+          <div class="field-group">
+            <label class="input-label">Ищу партнёра</label>
+            <div class="gender-btns">
+              <button
+                v-for="g in prefGenderOptions"
+                :key="g.value"
+                class="gender-btn"
+                :class="{ active: filters.prefGender === g.value }"
+                @click="filters.prefGender = g.value"
+              >{{ g.emoji }} {{ g.label }}</button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="input-label">Возраст: {{ filters.ageMin }}–{{ filters.ageMax }} лет</label>
+            <div class="age-range-row">
+              <input type="range" min="16" max="60" v-model.number="filters.ageMin" class="age-slider" />
+              <input type="range" min="16" max="60" v-model.number="filters.ageMax" class="age-slider" />
+            </div>
+          </div>
+
+          <button class="btn btn-primary btn-full" @click="applyFilters">Применить</button>
+        </div>
+      </div>
+    </Teleport>
+
   </div>
 </template>
 
@@ -56,285 +108,209 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { io, Socket } from 'socket.io-client';
-import QuestCard from './QuestCard.vue';
-import MatchSlotSelector from './MatchSlotSelector.vue';
 import { API_URL } from '../config';
+import QuestCard from './QuestCard.vue';
 
 const router = useRouter();
-
-interface Quest {
-  id: string;
-  title: string;
-  description: string;
-  subcategory: string;
-  imageUrl?: string;
-}
-
-const quests = ref<Quest[]>([]);
-let socket: Socket;
-
-// Состояние бана
+const quests = ref<any[]>([]);
+const loading = ref(true);
 const isBanned = ref(false);
 const banDateFormatted = ref('');
+const showFilters = ref(false);
 
-// Состояние модалки слотов
-const slotSelectorVisible = ref(false);
-const pendingSlots = ref<any[]>([]);
-const pendingLobbyId = ref(0);
-const pendingQuestId = ref('');
+const filters = ref({ prefGender: 'any', ageMin: 16, ageMax: 60 });
+const prefGenderOptions = [
+  { value: 'any', emoji: '🌟', label: 'Любой' },
+  { value: 'male', emoji: '👦', label: 'Парень' },
+  { value: 'female', emoji: '👧', label: 'Девушка' },
+];
 
-const logout = () => {
-  localStorage.removeItem('userId');
-  localStorage.removeItem('token');
-  router.push('/');
-};
+let socket: Socket | null = null;
 
-const loadQuests = async () => {
+async function loadQuests() {
+  loading.value = true;
   const token = localStorage.getItem('token');
-  if (!token) return;
+  if (!token) { router.push('/'); return; }
 
   try {
     const res = await fetch(`${API_URL}/quests/feed`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: { Authorization: `Bearer ${token}` },
     });
 
     if (res.status === 403) {
       const data = await res.json();
       isBanned.value = true;
-      banDateFormatted.value = data.message || 'Неизвестно';
+      const match = data.message?.match(/\d{4}-\d{2}-\d{2}/);
+      banDateFormatted.value = match
+        ? new Date(match[0]).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
+        : 'неизвестной даты';
       return;
     }
 
-    const data = await res.json();
-    quests.value = data.reverse();
-  } catch (e) {
-    console.error('Ошибка загрузки:', e);
+    quests.value = await res.json();
+  } catch {
+    quests.value = [];
+  } finally {
+    loading.value = false;
   }
-};
+}
 
-const onLike = async (questId: string) => {
+async function onLike(questId: string) {
+  if (!questId) return;
+  quests.value = quests.value.filter(q => q.id !== questId);
+
   const token = localStorage.getItem('token');
   if (!token) return;
 
   try {
     const res = await fetch(`${API_URL}/quests/swipe`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ questId, action: 'like' }),
     });
-    const result = await res.json();
+    const data = await res.json();
 
-    if (result.status === 'matched') {
-      router.push(`/match/${result.match.id}`);
-    } else if (result.status === 'already_matched') {
-      alert('У тебя уже есть активное задание!');
-      router.push(`/match/${result.matchId}`);
-    } else if (result.status === 'slots_required') {
-      // Новая логика: показываем модалку выбора слотов
-      pendingSlots.value = result.hostSlots || [];
-      pendingLobbyId.value = result.lobbyId;
-      pendingQuestId.value = result.questId || questId;
-      slotSelectorVisible.value = true;
-    } else {
-      setTimeout(() => quests.value.pop(), 300);
+    if (data.status === 'matched') {
+      router.push(`/match/${data.match.id}/schedule`);
+    } else if (data.status === 'already_matched') {
+      router.push(`/match/${data.matchId}/schedule`);
     }
-  } catch (e) {
-    console.error('Ошибка свайпа:', e);
-  }
-};
+  } catch { /* ignore */ }
+}
 
-const onSlotConfirm = async (slot: { dayOfWeek: number; timeFrom: string; timeTo: string }) => {
+function onNope(questId: string) {
+  if (!questId) return;
+  quests.value = quests.value.filter(q => q.id !== questId);
+}
+
+function applyFilters() {
+  showFilters.value = false;
+  loadQuests();
+}
+
+function logout() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('userId');
+  router.push('/');
+}
+
+function connectSocket() {
   const token = localStorage.getItem('token');
   if (!token) return;
-
-  try {
-    const res = await fetch(`${API_URL}/quests/confirm-slot`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ lobbyId: pendingLobbyId.value, selectedSlot: slot }),
-    });
-    const result = await res.json();
-
-    if (result.status === 'matched') {
-      router.push(`/match/${result.match.id}`);
-    } else {
-      alert(result.message || 'Лобби уже занято, попробуй другое.');
-      slotSelectorVisible.value = false;
-      loadQuests();
-    }
-  } catch (e) {
-    console.error('Ошибка подтверждения слота:', e);
-  }
-};
-
-const onSlotDecline = async () => {
-  const token = localStorage.getItem('token');
-  if (!token) return;
-
-  try {
-    await fetch(`${API_URL}/quests/decline-slots`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ questId: pendingQuestId.value }),
-    });
-    
-    slotSelectorVisible.value = false;
-    setTimeout(() => quests.value.pop(), 300);
-  } catch (e) {
-    console.error('Ошибка отклонения слотов:', e);
-  }
-};
-
-const onNope = async (questId: string) => {
-  const token = localStorage.getItem('token');
-  if (!token) return;
-
-  fetch(`${API_URL}/quests/swipe`, {
-    method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({ questId, action: 'dislike' }),
+  const wsUrl = API_URL.replace('/api', '');
+  socket = io(wsUrl, { auth: { token }, path: '/api-socket' });
+  socket.on('matchFound', (matchId: number) => {
+    router.push(`/match/${matchId}/schedule`);
   });
-  
-  setTimeout(() => quests.value.pop(), 300);
-};
-
-const connectToSocket = () => {
-  const token = localStorage.getItem('token');
-  if (!token) return;
-
-  socket = io(API_URL, {
-    auth: { token }
-  });
-  
-  socket.on('matchFound', (matchId) => {
-    router.push(`/match/${matchId}`);
-  });
-};
+}
 
 onMounted(() => {
   loadQuests();
-  connectToSocket();
+  connectSocket();
 });
 
-onUnmounted(() => {
-  if (socket) socket.disconnect();
-});
+onUnmounted(() => { socket?.disconnect(); });
 </script>
 
 <style scoped>
-.feed-container {
+.dashboard { overflow: hidden; }
+
+.cards-area {
+  flex: 1;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
-  min-height: 100vh;
+  justify-content: center;
+  padding: 20px 20px 0;
+  min-height: 0;
 }
+
 .cards-stack {
   position: relative;
-  width: 380px;
-  height: 520px;
-}
-.empty-state {
-  text-align: center;
-  background: rgba(255,255,255,0.8);
-  backdrop-filter: blur(10px);
-  padding: 40px;
-  border-radius: 32px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-}
-.retry-btn {
-  margin-top: 20px;
-  padding: 14px 28px;
-  border-radius: 16px;
-  border: none;
-  background: #7c9aff;
-  color: white;
-  font-weight: 800;
-  cursor: pointer;
+  width: 100%;
+  max-width: 360px;
+  height: 480px;
 }
 
-.dashboard-header {
-  position: absolute;
-  top: 0; left: 0; right: 0;
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 40px 20px;
+}
+.loading-spinner { font-size: 2.5rem; animation: spin 1.2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.swipe-hints {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  width: 100%;
+  max-width: 360px;
+  padding: 12px 8px 0;
+}
+.swipe-hint { display: flex; align-items: center; gap: 4px; font-size: 1rem; }
+
+.action-btns {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
   padding: 20px;
+}
+.action-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: none;
+  font-size: 1.5rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: transform 0.15s;
+}
+.action-btn:active { transform: scale(0.93); }
+.action-btn--nope { background: var(--danger-soft); color: var(--danger); }
+.action-btn--like { background: var(--success-soft); color: var(--success); }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(61,53,53,0.4);
+  backdrop-filter: blur(4px);
   z-index: 100;
-}
-.logo { font-weight: 900; font-size: 20px; color: #1d1d1f; }
-
-.header-actions {
   display: flex;
-  gap: 8px;
-  align-items: center;
+  align-items: flex-end;
 }
-
-.icon-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  border: none;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
-  font-size: 18px;
+.filter-drawer {
+  background: var(--surface);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 24px 20px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.filter-drawer__header { display: flex; align-items: center; justify-content: space-between; }
+.field-group { display: flex; flex-direction: column; gap: 8px; }
+.gender-btns { display: flex; gap: 10px; }
+.gender-btn {
+  flex: 1;
+  padding: 12px 8px;
+  border-radius: var(--radius-sm);
+  border: 2px solid #EDE8E5;
+  background: var(--surface);
+  font-family: var(--font);
+  font-size: 0.875rem;
+  font-weight: 600;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
+  color: var(--text-muted);
+  transition: all 0.15s;
 }
-.icon-btn:hover {
-  background: #f2f2f7;
-  transform: scale(1.05);
-}
+.gender-btn.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+.age-range-row { display: flex; flex-direction: column; gap: 8px; }
+.age-slider { width: 100%; accent-color: var(--primary); cursor: pointer; }
 
-.logout-btn {
-  background: rgba(255, 60, 60, 0.1); color: #ff3c3c;
-  border: none; padding: 8px 16px; border-radius: 12px;
-  font-weight: bold; cursor: pointer;
-}
-
-/* Экран бана */
-.ban-screen {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  padding: 24px;
-}
-.ban-card {
-  text-align: center;
-  background: white;
-  border-radius: 32px;
-  padding: 48px;
-  max-width: 400px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.1);
-}
-.ban-icon { font-size: 64px; margin-bottom: 16px; }
-.ban-card h2 { font-size: 24px; font-weight: 800; color: #1d1d1f; margin-bottom: 12px; }
-.ban-card p { color: #86868b; font-size: 15px; line-height: 1.5; }
-.ban-date { margin-top: 16px; }
-.ban-date strong { color: #ff3c3c; }
-.logout-btn-big {
-  margin-top: 24px;
-  padding: 14px 32px;
-  border-radius: 16px;
-  border: none;
-  background: #f2f2f7;
-  font-weight: 700;
-  font-size: 15px;
-  cursor: pointer;
-}
+.ban-screen { align-items: center; justify-content: center; text-align: center; }
+.ban-icon { font-size: 4rem; }
 </style>

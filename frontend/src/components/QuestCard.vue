@@ -1,20 +1,40 @@
 <template>
-  <div 
-    ref="interactElement" 
-    class="quest-card" 
+  <div
+    ref="interactElement"
+    class="event-card"
     :style="cardStyle"
   >
-    <div class="card-image" :style="{ background: quest.imageUrl ? `url(${quest.imageUrl}) center/cover` : 'linear-gradient(45deg, #a1c4fd, #c2e9fb)' }">
-      <div class="category-tag">{{ quest.subcategory }}</div>
+    <!-- Изображение / фон -->
+    <div
+      class="event-card__image"
+      :style="{ background: quest.imageUrl
+        ? `linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.55) 100%), url(${quest.imageUrl}) center/cover`
+        : gradientForCategory(quest.category) }"
+    >
+      <!-- Категория -->
+      <div class="event-card__category">{{ categoryEmoji(quest.category) }} {{ quest.subcategory }}</div>
+
+      <!-- Плашки поверх фото -->
+      <div class="event-card__badges">
+        <div class="payment-badge">🤝 50/50</div>
+        <div v-if="quest.price" class="badge badge-muted">💰 {{ quest.price }}</div>
+      </div>
+
+      <!-- Заголовок внутри фото -->
+      <div class="event-card__title-area">
+        <h2>{{ quest.title }}</h2>
+        <div v-if="quest.address" class="event-card__address">📍 {{ quest.address }}</div>
+      </div>
     </div>
 
-    <div class="card-content">
-      <h2>{{ quest.title }}</h2>
+    <!-- Описание -->
+    <div class="event-card__body">
       <p>{{ quest.description }}</p>
     </div>
 
-    <div class="stamp stamp-like" :style="{ opacity: likeOpacity }">ПОГНАЛИ</div>
-    <div class="stamp stamp-nope" :style="{ opacity: nopeOpacity }">МЬЕ...</div>
+    <!-- Свайп-штампы -->
+    <div class="stamp stamp-like" :style="{ opacity: likeOpacity }">ПОЙДУ!</div>
+    <div class="stamp stamp-nope" :style="{ opacity: nopeOpacity }">НЕ СЕЙЧАС</div>
   </div>
 </template>
 
@@ -23,7 +43,16 @@ import { ref, computed, onMounted } from 'vue';
 import interact from 'interactjs';
 
 const props = defineProps<{
-  quest: { id: string, title: string, description: string, subcategory: string, imageUrl?: string }
+  quest: {
+    id: string;
+    title: string;
+    description: string;
+    category: string;
+    subcategory: string;
+    imageUrl?: string;
+    address?: string;
+    price?: string;
+  }
 }>();
 
 const emit = defineEmits(['swipeRight', 'swipeLeft']);
@@ -32,99 +61,155 @@ const x = ref(0);
 const y = ref(0);
 const rotation = ref(0);
 const isInteracting = ref(false);
+const interactElement = ref<HTMLElement>();
 
 const cardStyle = computed(() => ({
   transform: `translate3d(${x.value}px, ${y.value}px, 0) rotate(${rotation.value}deg)`,
-  transition: isInteracting.value ? 'none' : 'transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+  transition: isInteracting.value ? 'none' : 'transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
 }));
 
-// Прозрачность штампов "Like/Nope" в зависимости от сдвига
-const likeOpacity = computed(() => Math.min(x.value / 150, 1));
-const nopeOpacity = computed(() => Math.min(-x.value / 150, 1));
+const likeOpacity = computed(() => Math.max(0, Math.min(x.value / 120, 1)));
+const nopeOpacity = computed(() => Math.max(0, Math.min(-x.value / 120, 1)));
 
-const interactElement = ref(null);
+function categoryEmoji(cat: string) {
+  return { offline: '🌍', games: '🎮', online: '📱' }[cat] ?? '✨';
+}
+
+function gradientForCategory(cat: string) {
+  const gradients: Record<string, string> = {
+    offline: 'linear-gradient(135deg, #FAD7C8 0%, #E8A598 100%)',
+    games:   'linear-gradient(135deg, #C8D4FA 0%, #8A98E8 100%)',
+    online:  'linear-gradient(135deg, #C8FAE0 0%, #7EC8A0 100%)',
+  };
+  return gradients[cat] ?? 'linear-gradient(135deg, #FAF0E8 0%, #E8C8A0 100%)';
+}
 
 onMounted(() => {
-  // Добавляем проверку на существование элемента
-  if (interactElement.value) {
-    interact(interactElement.value as HTMLElement).draggable({
-      onstart: () => { 
-        isInteracting.value = true; 
-      },
-      onmove: (event) => {
-        x.value += event.dx;
-        y.value += event.dy;
-        rotation.value = x.value / 15;
-      },
-      onend: () => {
-        isInteracting.value = false;
-        if (x.value > 120) {
-          x.value = 1000;
-          emit('swipeRight', props.quest.id);
-        } else if (x.value < -120) {
-          x.value = -1000;
-          emit('swipeLeft', props.quest.id);
-        } else {
-          x.value = 0; 
-          y.value = 0; 
-          rotation.value = 0;
-        }
+  if (!interactElement.value) return;
+  interact(interactElement.value).draggable({
+    onstart: () => { isInteracting.value = true; },
+    onmove: (e) => {
+      x.value += e.dx;
+      y.value += e.dy;
+      rotation.value = x.value / 18;
+    },
+    onend: () => {
+      isInteracting.value = false;
+      if (x.value > 110) {
+        x.value = 1000;
+        emit('swipeRight', props.quest.id);
+      } else if (x.value < -110) {
+        x.value = -1000;
+        emit('swipeLeft', props.quest.id);
+      } else {
+        x.value = 0;
+        y.value = 0;
+        rotation.value = 0;
       }
-    });
-  }
+    },
+  });
 });
 </script>
 
 <style scoped>
-.quest-card {
+.event-card {
   position: absolute;
   width: 100%;
-  max-width: 380px;
-  height: 520px;
-  background: white;
-  border-radius: 32px;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+  max-width: 360px;
+  background: var(--surface);
+  border-radius: 28px;
+  box-shadow: 0 12px 40px rgba(61, 53, 53, 0.14);
   overflow: hidden;
   cursor: grab;
   touch-action: none;
   display: flex;
   flex-direction: column;
+  user-select: none;
 }
+.event-card:active { cursor: grabbing; }
 
-.card-image {
-  flex: 1;
+.event-card__image {
   position: relative;
-  min-height: 300px;
+  height: 320px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px;
 }
 
-.category-tag {
-  position: absolute;
-  top: 20px; left: 20px;
-  background: rgba(255,255,255,0.9);
-  padding: 6px 14px;
+.event-card__category {
+  align-self: flex-start;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(8px);
+  padding: 5px 12px;
   border-radius: 100px;
-  font-size: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: capitalize;
+}
+
+.event-card__badges {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
+.event-card__title-area {
+  color: #fff;
+}
+.event-card__title-area h2 {
+  font-size: 1.375rem;
   font-weight: 800;
-  text-transform: uppercase;
+  line-height: 1.2;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  margin-bottom: 4px;
+}
+.event-card__address {
+  font-size: 0.8rem;
+  opacity: 0.9;
+  font-weight: 600;
 }
 
-.card-content {
-  padding: 24px;
+.event-card__body {
+  padding: 16px 20px 20px;
+}
+.event-card__body p {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 0;
 }
 
-h2 { margin: 0 0 10px; font-size: 24px; color: #1d1d1f; }
-p { color: #86868b; font-size: 16px; line-height: 1.4; margin: 0; }
-
+/* Свайп штампы */
 .stamp {
   position: absolute;
-  top: 40px;
-  padding: 10px 20px;
-  border: 4px solid;
-  border-radius: 12px;
-  font-size: 32px;
+  top: 36px;
+  padding: 8px 18px;
+  border: 3.5px solid;
+  border-radius: 10px;
+  font-size: 1.25rem;
   font-weight: 900;
   pointer-events: none;
+  letter-spacing: 0.05em;
+  backdrop-filter: blur(4px);
 }
-.stamp-like { right: 40px; color: #43E97B; border-color: #43E97B; transform: rotate(15deg); }
-.stamp-nope { left: 40px; color: #FF6B6B; border-color: #FF6B6B; transform: rotate(-15deg); }
+.stamp-like {
+  right: 24px;
+  color: var(--success);
+  border-color: var(--success);
+  background: var(--success-soft);
+  transform: rotate(12deg);
+}
+.stamp-nope {
+  left: 24px;
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  transform: rotate(-12deg);
+}
 </style>

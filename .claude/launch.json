@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Backend (NestJS)",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd /d D:\\dev\\dating\\backend && npm run start:dev"],
+      "port": 3000
+    },
+    {
+      "name": "Frontend (Vite/Vue)",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "port": 80
+    }
+  ]
+}

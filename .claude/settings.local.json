@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(cmd /c \"dir /b \\\\\"D:\\\\dev\\\\dating\\\\.claude\\\\worktrees\\\\cool-khorana\\\\backend\\\\\"\")",
+      "Bash(cmd /c \"dir \\\\\"D:\\\\dev\\\\dating\\\\.claude\\\\worktrees\\\\cool-khorana\\\\backend\\\\\"\")",
+      "Bash(cmd /c \"mklink /J \\\\\"D:\\\\dev\\\\dating\\\\.claude\\\\worktrees\\\\cool-khorana\\\\frontend\\\\node_modules\\\\\" \\\\\"D:\\\\dev\\\\dating\\\\frontend\\\\node_modules\\\\\"\")",
+      "Bash(cmd /c \"mklink /J \\\\\"D:\\\\dev\\\\dating\\\\.claude\\\\worktrees\\\\cool-khorana\\\\backend\\\\node_modules\\\\\" \\\\\"D:\\\\dev\\\\dating\\\\backend\\\\node_modules\\\\\"\")",
+      "Bash(cmd /c \"dir \\\\\"D:\\\\dev\\\\dating\\\\.claude\\\\worktrees\\\\cool-khorana\\\\frontend\\\\\"\")",
+      "Bash(findstr /i \"node_modules\")",
+      "Bash(cmd /c \"dir /AL \\\\\"D:\\\\dev\\\\dating\\\\.claude\\\\worktrees\\\\cool-khorana\\\\frontend\\\\\"\")",
+      "Bash(cmd /c \"powershell -Command \\\\\"New-Item -ItemType Junction -Path 'D:\\\\\\\\dev\\\\\\\\dating\\\\\\\\.claude\\\\\\\\worktrees\\\\\\\\cool-khorana\\\\\\\\frontend\\\\\\\\node_modules' -Target 'D:\\\\\\\\dev\\\\\\\\dating\\\\\\\\frontend\\\\\\\\node_modules'\\\\\"\")",
+      "Bash(cmd /c \"powershell -Command \\\\\"Test-Path 'D:\\\\\\\\dev\\\\\\\\dating\\\\\\\\.claude\\\\\\\\worktrees\\\\\\\\cool-khorana\\\\\\\\frontend\\\\\\\\node_modules'\\\\\"\")",
+      "Bash(npm install:*)"
+    ]
+  }
+}
