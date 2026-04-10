@@ -1,0 +1,82 @@
+[
+  {
+    "id": "creative-pair-coding",
+    "title": "Парное кодинг-пати",
+    "description": "Встречаемся с ноутбуками в удобном коворкинге или Coffee 3. Задача: дописать одну маленькую фичу (или исправить баг) за 1 час. Ожидание: 40 минут кода, 20 минут ревью.",
+    "category": "creativity",
+    "subcategory": "coding",
+    "imageUrl": "https://images.unsplash.com/photo-1517694712202-14dd9538aa97"
+  },
+  {
+    "id": "creative-photo-walk",
+    "title": "Фото-прогулка: Петроградка",
+    "description": "Идем снимать архитектуру северного модерна. Задача: сделать 5 крутых кадров друг друга. Ожидание: 1 час движения. Обсуждаем свет и композицию.",
+    "category": "creativity",
+    "subcategory": "photo",
+    "imageUrl": "https://images.unsplash.com/photo-1542038784456-1ea8e935640e"
+  },
+  {
+    "id": "creative-paint-40m",
+    "title": "Живопись маслом за 40 минут",
+    "description": "Идем в арт-студию или берем скетчбуки. Задача: нарисовать один быстрый этюд. Ожидание: творческий беспорядок и запах краски. Материалы каждый себе сам.",
+    "category": "creativity",
+    "subcategory": "art",
+    "imageUrl": "https://images.unsplash.com/photo-1513364776144-60967b0f800f"
+  },
+  {
+    "id": "creative-karaoke-battle",
+    "title": "Караоке-баттл: Спеть дуэтом",
+    "description": "Идем в бар на Думской или Рубинштейна. Задача: спеть ОДНУ песню вместе (Валерий Меладзе — хит). Ожидание: 15 минут подготовки и 4 минуты позора/славы.",
+    "category": "creativity",
+    "subcategory": "music",
+    "imageUrl": "https://images.unsplash.com/photo-1516280440614-37939bb91206"
+  },
+  {
+    "id": "creative-writing-prompt",
+    "title": "Литературный prompt: 15 минут",
+    "description": "Встреча в тихой библиотеке Маяковского. Берем черновики. Задача: написать короткую зарисовку о человеке за соседним столиком. Ожидание: обмен текстами.",
+    "category": "creativity",
+    "subcategory": "writing",
+    "imageUrl": "https://images.unsplash.com/photo-1516321318423-f06f85e504b3"
+  },
+  {
+    "id": "creative-pottery-wheel",
+    "title": "Гончарный круг: Первая чашка",
+    "description": "Идем в 'Академию Керамики'. Мастер-класс на 1 час. Задача: слепить хотя бы что-то похожее на кружку. Ожидание: грязные руки и результат.",
+    "category": "creativity",
+    "subcategory": "pottery",
+    "imageUrl": "https://images.unsplash.com/photo-1513364776144-60967b0f800f"
+  },
+  {
+    "id": "creative-jam-session",
+    "title": "Музыкальный джем: Гитары",
+    "description": "Берем инструменты, идем к заливу (Севкабель). Задача: сыграть 3 знакомых всем аккорда и поимпровизировать. Ожидание: искренность и шум ветра.",
+    "category": "creativity",
+    "subcategory": "music",
+    "imageUrl": "https://images.unsplash.com/photo-1510915228340-29c85a43dcfe"
+  },
+  {
+    "id": "creative-origami-crane",
+    "title": "Оригами: 10 журавликов за час",
+    "description": "Идем в кофейню 'Оригами' (или любую тихую). Задача: вдвоем собрать стаю журавликов. Ожидание: 40 минут медитативного складывания бумаги.",
+    "category": "creativity",
+    "subcategory": "art",
+    "imageUrl": "https://images.unsplash.com/photo-1563291074-2bf84762b2ac"
+  },
+  {
+    "id": "creative-hackathon-prep",
+    "title": "Обсуждение идеи стартапа",
+    "description": "Берем салфетки и ручки в баре. Задача: за 30 минут придумать 'Uber для X'. Ожидание: смелые идеи и реализм. Задача: составить канвас на салфетке.",
+    "category": "creativity",
+    "subcategory": "coding",
+    "imageUrl": "https://images.unsplash.com/photo-1531482615713-2afd69097998"
+  },
+  {
+    "id": "creative-improv-acting",
+    "title": "Актерский этюд: Без слов",
+    "description": "Встречаемся в тихом уголке Александровского парка. Задача: за 10 минут разыграть немую сценку 'Встреча в 2077 году'. Ожидание: раскрепощение и смех.",
+    "category": "creativity",
+    "subcategory": "theatre",
+    "imageUrl": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4"
+  }
+]

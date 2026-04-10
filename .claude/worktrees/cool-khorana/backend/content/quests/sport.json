@@ -1,0 +1,82 @@
+[
+  {
+    "id": "sport-holland-workout",
+    "title": "Воркаут в Новой Голландии",
+    "description": "Идем на современную площадку. Задача: 3 круга по 10 подтягиваний/отжиманий. Ожидание: 40 минут активности, потом отдых на траве.",
+    "category": "sport",
+    "subcategory": "workout",
+    "imageUrl": "https://images.unsplash.com/photo-1541534741688-6078c6bd35e5"
+  },
+  {
+    "id": "sport-cpkio-bike",
+    "title": "Велик в ЦПКиО (Елагин)",
+    "description": "Берем напрокат велосипед или катим на своем. Проезжаем 3 полных круга по острову. Ожидание: 1 час кардио и свежий воздух. Напитки (вода/изотоник) - каждый сам.",
+    "category": "sport",
+    "subcategory": "cycling",
+    "imageUrl": "https://images.unsplash.com/photo-1541625602330-2277a1cd1f59"
+  },
+  {
+    "id": "sport-run-centr",
+    "title": "Пробежка по Набережной",
+    "description": "Маршрут: от Дворцового моста до Медного всадника и обратно. Темп: 6:00 мин/км. Дистанция: 5 км. Ожидание: 30 минут бега. Без лишней болтовни во время движения.",
+    "category": "sport",
+    "subcategory": "running",
+    "imageUrl": "https://images.unsplash.com/photo-1476480862126-209bfaa8edc8"
+  },
+  {
+    "id": "sport-yoga-grass",
+    "title": "Йога на траве в Таврическом",
+    "description": "Берем коврики. Задача: 30 минут растяжки и сурья-намаскар. Ожидание: фокус на теле и дыхании. Без телефонов во время практики.",
+    "category": "sport",
+    "subcategory": "yoga",
+    "imageUrl": "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b"
+  },
+  {
+    "id": "sport-basket-3v3",
+    "title": "Баскетбол 3 на 3",
+    "description": "Поиск 3-го человека для игры на уличной площадке. Локация: Коломна или Петроградка. Ожидание: 1 час интенсивного баскетбола. Играем до 21 очка.",
+    "category": "sport",
+    "subcategory": "basketball",
+    "imageUrl": "https://images.unsplash.com/photo-1546519638-68e1084f7082"
+  },
+  {
+    "id": "sport-swimming-pool",
+    "title": "Бассейн: стометровки",
+    "description": "Совместный поход в крытый бассейн. Дистанция: 1 км. Задача: плывем интервалы. Оплата билета каждый сам за себя.",
+    "category": "sport",
+    "subcategory": "swimming",
+    "imageUrl": "https://images.unsplash.com/photo-1530549387631-afb16885dc76"
+  },
+  {
+    "id": "sport-tennis-ping",
+    "title": "Настольный теннис: турнир",
+    "description": "Идем в ТЦ или на уличную площадку. Играем до 3-х побед по 11 очков. Ожидание: 40 минут азартной игры. Проигравший платит за аренду стола?",
+    "category": "sport",
+    "subcategory": "tennis",
+    "imageUrl": "https://images.unsplash.com/photo-1534158914592-062992fbe900"
+  },
+  {
+    "id": "sport-climbing-wall",
+    "title": "Скалодром: первая вершина",
+    "description": "Идем на боулдеринг или на высокую стенку. Помогаем друг другу со страховкой. Ожидание: 1.5 часа нагрузки и борьба со страхом высоты.",
+    "category": "sport",
+    "subcategory": "climbing",
+    "imageUrl": "https://images.unsplash.com/photo-1522163182402-834f871fd851"
+  },
+  {
+    "id": "sport-badminton-park",
+    "title": "Бадминтон без ветра",
+    "description": "Встречаемся в затишье в парке и просто лупим воланчик 30 минут без остановки. Ожидание: легкая нагрузка и веселье.",
+    "category": "sport",
+    "subcategory": "badminton",
+    "imageUrl": "https://images.unsplash.com/photo-1521537634581-0dced2fee2ef"
+  },
+  {
+    "id": "sport-rollers-centr",
+    "title": "Ролики: ночной выезд",
+    "description": "Катим от м. Приморская по ровному асфальту. Защита обязательна. Ожидание: 1 час скорости и обсуждение лучших колес.",
+    "category": "sport",
+    "subcategory": "skating",
+    "imageUrl": "https://images.unsplash.com/photo-1518770660439-4636190af475"
+  }
+]

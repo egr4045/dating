@@ -1,0 +1,41 @@
+:root {
+  --bg-color: #f8faff;
+  --card-bg: rgba(255, 255, 255, 0.8);
+  --primary-color: #7c9aff;
+  --text-main: #2d3436;
+  --text-soft: #636e72;
+  --radius: 24px;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow: hidden; /* Чтобы сферы не создавали скролл */
+}
+
+/* Фон с лавовой лампой */
+.background-blobs {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  z-index: -1;
+  filter: blur(80px);
+  background: #f0f4ff;
+}
+
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  animation: move 20s infinite alternate;
+}
+
+.blob-1 { width: 400px; height: 400px; background: #d6e0ff; top: -10%; left: -10%; }
+.blob-2 { width: 500px; height: 500px; background: #ffe3e3; bottom: -10%; right: -5%; animation-duration: 25s; }
+.blob-3 { width: 300px; height: 300px; background: #e3ffe9; top: 40%; left: 30%; animation-duration: 18s; }
+
+@keyframes move {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(100px, 50px) scale(1.1); }
+}

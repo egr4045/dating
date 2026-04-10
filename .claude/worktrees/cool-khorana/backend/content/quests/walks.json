@@ -1,0 +1,82 @@
+[
+  {
+    "id": "walk-courtyards-secret",
+    "title": "Секретные Дворы-Колодцы",
+    "description": "Маршрут: Пять углов — Владимирская — Фонтанка. Задача: найти 3 открытых проходных двора. Ожидание: 1 час прогулки и крутые фото-споты. Кофе берем фильтр в начале.",
+    "category": "walks",
+    "subcategory": "city",
+    "imageUrl": "https://images.unsplash.com/photo-1548502499-ef49e8cf98d4"
+  },
+  {
+    "id": "walk-kolomna-quiet",
+    "title": "Тихая Коломна: Канал Грибоедова",
+    "description": "Прогулка от Семимостья до Мариинки и дальше к заливу. Ожидание: тишина и мало людей. Цель: дойти до Никольского собора. Темп: ленивый шагом.",
+    "category": "walks",
+    "subcategory": "quiet",
+    "imageUrl": "https://images.unsplash.com/photo-1554124462-f1d1362e2973"
+  },
+  {
+    "id": "walk-roof-view",
+    "title": "Вид с крыши: Петроградка",
+    "description": "Легальная крыша (или проверенный спот). Задача: 20 минут смотреть на закат и купола. Обсуждаем архитектуру и ветер. Берем куртки с собой.",
+    "category": "walks",
+    "subcategory": "rooftop",
+    "imageUrl": "https://images.unsplash.com/photo-1541562232579-2ef539cc233d"
+  },
+  {
+    "id": "walk-peski-blocks",
+    "title": "Кварталы Песков (8 советских)",
+    "description": "Маршрут через Таврический сад до Пяти углов (дальнего куска). Задача: найти самое старое дерево в Таврике. Ожидание: 1.5 часа активной ходьбы.",
+    "category": "walks",
+    "subcategory": "city",
+    "imageUrl": "https://images.unsplash.com/photo-1550439062-609e1531270e"
+  },
+  {
+    "id": "walk-sevkabel-wind",
+    "title": "Севкабель порт и берег Финского",
+    "description": "Идем к воде. Задача: 15 минут молча смотреть на Финский залив и ЗСД. Ожидание: ветер, свобода и обсуждение лучших мест города у воды.",
+    "category": "walks",
+    "subcategory": "water",
+    "imageUrl": "https://images.unsplash.com/photo-1551632867-cda84bec797c"
+  },
+  {
+    "id": "walk-vladimirskaya-bars",
+    "title": "Улочки Владимирской: Бар-хоппинг",
+    "description": "Прогулка от Некрасова до Рубинштейна. Задача: зайти в 2 бара (один коктейльный, один крафтовый). Правило: по 1 напитку и идем дальше.",
+    "category": "walks",
+    "subcategory": "night",
+    "imageUrl": "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b"
+  },
+  {
+    "id": "walk-museum-hermitage",
+    "title": "Эрмитаж: 3 картины за час",
+    "description": "Задача: идем только в залы Рембрандта или Голландцев. Не пытаемся обойти всё. Строго 1 час. Оплата билета каждый сам.",
+    "category": "walks",
+    "subcategory": "museum",
+    "imageUrl": "https://images.unsplash.com/photo-1518998053502-53cc8de411b2"
+  },
+  {
+    "id": "walk-botanical-garden",
+    "title": "Парниковый Ботанический сад",
+    "description": "Тропический и водный маршруты. Задача: найти самую большую пальму. Ожидание: влажность, зелень и ощущение юга в центре Питера.",
+    "category": "walks",
+    "subcategory": "garden",
+    "imageUrl": "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b"
+  },
+  {
+    "id": "walk-shopping-manual",
+    "title": "Шоппинг-помощник: Галерея",
+    "description": "Конкретная цель: выбрать одну вещь (футболку/кеды) за 45 минут. Взаимопомощь в примерочных. Избегаем очередей. Ожидание: конструктивная критика.",
+    "category": "walks",
+    "subcategory": "shopping",
+    "imageUrl": "https://images.unsplash.com/photo-1483985988355-763728e1935b"
+  },
+  {
+    "id": "walk-zoo-feed",
+    "title": "Зоопарк: Кормление жирафа",
+    "description": "Идем к открытию или конкретному времени кормления. Цель: 30 минут наблюдения за животными. Оплата входа - каждый сам.",
+    "category": "walks",
+    "subcategory": "zoo",
+    "imageUrl": "https://images.unsplash.com/photo-1534567153574-2b12153a87f0"
+  }
+]

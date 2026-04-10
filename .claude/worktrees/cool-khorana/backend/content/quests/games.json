@@ -1,0 +1,90 @@
+[
+  {
+    "id": "dota-huskar-dazzle",
+    "title": "Связка: Huskar + Dazzle",
+    "description": "Легендарное комбо. Я на Хускаре, ты на Даззле (или наоборот). Идем доминировать линию, сносим Т1 до 10 минуты. Ожидание: агрессивная игра и бессмертие.",
+    "category": "games",
+    "subcategory": "dota",
+    "imageUrl": "https://images.unsplash.com/photo-1542751371-adc38448a05e"
+  },
+  {
+    "id": "dota-tiny-centaur",
+    "title": "Связка: Tiny + Centaur",
+    "description": "Тосс-комбо! Кидаю тебя в толпу, ты станишь. Роли: 4 и 3. Задача: сделать 5 киллов на линии через прокаст.",
+    "category": "games",
+    "subcategory": "dota",
+    "imageUrl": "https://images.unsplash.com/photo-1542751110-97427bbecf20"
+  },
+  {
+    "id": "dota-jugg-cm",
+    "title": "Связка: Juggernaut + CM",
+    "description": "Классика. Кручу — морозишь. Идем в легкую линию. Цель: фб на первой минуте.",
+    "category": "games",
+    "subcategory": "dota",
+    "imageUrl": "https://images.unsplash.com/photo-1511512578047-dfb367046420"
+  },
+  {
+    "id": "val-duelist-smoke",
+    "title": "Valorant: Duelist + Controller",
+    "description": "Идем в рейтинг. Я открываю точку, ты закрываешь обзоры. Задача: идеальный ретейк или установка спайка под смоки.",
+    "category": "games",
+    "subcategory": "val",
+    "imageUrl": "https://images.unsplash.com/photo-1624138784614-87fd1b6528f8"
+  },
+  {
+    "id": "val-sage-jett",
+    "title": "Valorant: Sage + Jett",
+    "description": "Классический тандем. Сейдж хилит и ставит стенки, Джетт влетает. Ожидание: командная работа и подсадки.",
+    "category": "games",
+    "subcategory": "val",
+    "imageUrl": "https://images.unsplash.com/photo-1560253023-3ee5d6453120"
+  },
+  {
+    "id": "lol-yasuo-malphite",
+    "title": "LoL: Yasuo + Malphite",
+    "description": "Wombo Combo! Ждем 6-го уровня и реализуем идеальный подброс с ультой Ясуо. Желательно ранкед.",
+    "category": "games",
+    "subcategory": "lol",
+    "imageUrl": "https://images.unsplash.com/photo-1542751371-adc38448a05e"
+  },
+  {
+    "id": "genshin-raiden-boss",
+    "title": "Genshin: Охота на Райдэн",
+    "description": "Заход в подземелье Наруками. Время: 20-30 минут. Задача: выбить топовые артефакты. Билд: электро или оверлоад.",
+    "category": "games",
+    "subcategory": "genshin",
+    "imageUrl": "https://images.unsplash.com/photo-1614680376593-902f74cf0d41"
+  },
+  {
+    "id": "genshin-resin-run",
+    "title": "Genshin: Спидран на 160 смолы",
+    "description": "Быстрый проход по боссам (Гипостазисы/Папоротники/Океанид) за 40 минут. Помогаем друг другу с материалами возвышения.",
+    "category": "games",
+    "subcategory": "genshin",
+    "imageUrl": "https://images.unsplash.com/photo-1538481199705-c710c4e965fc"
+  },
+  {
+    "id": "roblox-doors-50",
+    "title": "Roblox: Doors (Комната 50)",
+    "description": "Челлендж: вдвоем дойти до 50 комнаты (Библиотека) без смертей и пройти Фигуру. Командная работа обязательна.",
+    "category": "games",
+    "subcategory": "roblox",
+    "imageUrl": "https://images.unsplash.com/photo-1493711662062-fa541adb3fc8"
+  },
+  {
+    "id": "roblox-tower-hell",
+    "title": "Roblox: Tower of Hell",
+    "description": "Задача: пройти сложную башню дважды подряд. Проверяем скилл паркура и нервы.",
+    "category": "games",
+    "subcategory": "roblox",
+    "imageUrl": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5"
+  },
+  {
+    "id": "chess-online-rapid",
+    "title": "Шахматы: 3 партии в Рапид",
+    "description": "Играем на Lichess или Chess.com. Контроль: 10 минут. Без личных встреч, только онлайн под Дискорд. Обсуждаем дебюты и зевки.",
+    "category": "games",
+    "subcategory": "chess",
+    "imageUrl": "https://images.unsplash.com/photo-1529699211952-734e80c4d42b"
+  }
+]

@@ -1,0 +1,82 @@
+[
+  {
+    "id": "brba-fly",
+    "title": "Breaking Bad: Серия 'Муха' (S3E10)",
+    "description": "Смотрим один из самых спорных и глубоких эпизодов. Обсуждаем символизм, безумие Хайзенберга и то, как одна муха может изменить динамику шоу. Время: 47 минут.",
+    "category": "movies",
+    "subcategory": "series",
+    "imageUrl": "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85"
+  },
+  {
+    "id": "black-mirror-nosedive",
+    "title": "Black Mirror: S3E1 'Nosedive'",
+    "description": "Смотрим серию про мир социального рейтинга. Обсуждаем, насколько это близко к реальности и готовы ли мы жить в таком обществе. Идеально для первого обсуждения.",
+    "category": "movies",
+    "subcategory": "series",
+    "imageUrl": "https://images.unsplash.com/photo-1550745165-9bc0b252726f"
+  },
+  {
+    "id": "sherlock-study-pink",
+    "title": "Sherlock: 'Этюд в розовых тонах'",
+    "description": "Первая серия великого детектива. Оцениваем дедукцию Шерлока и современного доктора Ватсона. Повод: классика 2010-х.",
+    "category": "movies",
+    "subcategory": "series",
+    "imageUrl": "https://images.unsplash.com/photo-1509248961158-e54f6934749c"
+  },
+  {
+    "id": "arcane-ep3",
+    "title": "Arcane: Episode 3 (Эмоциональный пик)",
+    "description": "Смотрим серию, которая перевернула наше представление об анимации. Слёзы, экшен и нереальный визуал. Обсуждаем конфликт сестер.",
+    "category": "movies",
+    "subcategory": "anime",
+    "imageUrl": "https://images.unsplash.com/photo-1614680376593-902f74cf0d41"
+  },
+  {
+    "id": "spider-verse",
+    "title": "Spider-Man: Across the Spider-Verse",
+    "description": "Смотрим из-за графики и саундтрека. Ожидание: 2.5 часа визуального кайфа и обсуждение мультивселенных.",
+    "category": "movies",
+    "subcategory": "animation",
+    "imageUrl": "https://images.unsplash.com/photo-1635805737707-575885ab0820"
+  },
+  {
+    "id": "inception-movie",
+    "title": "Inception (Начало)",
+    "description": "Смотрим и пытаемся понять: упал волчок в конце или нет? Глубокие смыслы и Нолановский эпик.",
+    "category": "movies",
+    "subcategory": "sci-fi",
+    "imageUrl": "https://images.unsplash.com/photo-1485846234645-a62644f84728"
+  },
+  {
+    "id": "dune-part-2",
+    "title": "Dune: Part Two",
+    "description": "Эпический масштаб и звук. Ожидание: смотрим на большом экране (или хорошем мониторе) и погружаемся в пески Арракиса.",
+    "category": "movies",
+    "subcategory": "sci-fi",
+    "imageUrl": "https://images.unsplash.com/photo-1478720568477-152d9b164e26"
+  },
+  {
+    "id": "parasite-thriller",
+    "title": "Parasite (Паразиты)",
+    "description": "Триллер и мощное социальное высказывание. Обсуждаем конфликт классов и непредсказуемый финал.",
+    "category": "movies",
+    "subcategory": "thriller",
+    "imageUrl": "https://images.unsplash.com/photo-1536440136628-849c177e76a1"
+  },
+  {
+    "id": "ghibli-spirited-away",
+    "title": "Унесенные призраками",
+    "description": "Шедевр Миядзаки. Смотрим вместе и ищем скрытые смыслы в каждом персонаже. Атмосфера сказки обязательна.",
+    "category": "movies",
+    "subcategory": "anime",
+    "imageUrl": "https://images.unsplash.com/photo-1541562232579-2ef539cc233d"
+  },
+  {
+    "id": "pulp-fiction",
+    "title": "Pulp Fiction (Криминальное чтиво)",
+    "description": "Сверхстильное кино Тарантино. Обсуждаем нелинейный сюжет и лучшие диалоги. Ожидание: цитируем каждое второе слово.",
+    "category": "movies",
+    "subcategory": "classic",
+    "imageUrl": "https://images.unsplash.com/photo-1594909122845-11baa439b7bf"
+  }
+]

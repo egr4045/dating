@@ -1,0 +1,104 @@
+// backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              Int      @id @default(autoincrement())
+  telegramId      String   @unique
+  username        String?
+  firstName       String
+  avatarUrl       String?
+  reputation      Float    @default(5.0)
+  interests       String[]
+  bannedUntil     DateTime?
+
+  // Профиль
+  age             Int?
+  gender          String?      // "male" | "female" | "other"
+  city            String?
+  bio             String?
+  photoUrl        String?
+  videoUrl        String?
+  videoVerified   Boolean  @default(false)
+
+  // Предпочтения партнёра
+  prefGender      String?      // "male" | "female" | "any"
+  prefAgeMin      Int?         @default(18)
+  prefAgeMax      Int?         @default(50)
+
+  // Счётчик гостингов
+  ghostCount      Int      @default(0)
+
+  hostedLobbies   QuestLobby[]  @relation("Host")
+  joinedLobbies   QuestLobby[]  @relation("Participant")
+  timeSlots       TimeSlot[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model QuestTemplate {
+  id          String   @id
+  title       String
+  description String
+  category    String   // "games", "offline", "online"
+  subcategory String
+  lobbies     QuestLobby[]
+  imageUrl    String?
+  address     String?  // Адрес места события
+  price       String?  // "~500₽/чел", "бесплатно"
+  paymentRule String   @default("50/50")
+}
+
+model QuestLobby {
+  id                    Int           @id @default(autoincrement())
+  templateId            String
+  template              QuestTemplate @relation(fields: [templateId], references: [id])
+  hostId                Int
+  host                  User          @relation("Host", fields: [hostId], references: [id])
+  participantId         Int?
+  participant           User?         @relation("Participant", fields: [participantId], references: [id])
+  status                String        @default("WAITING")
+  
+  // Поля для согласования даты встречи
+  scheduledAt           DateTime?     // Зафиксированная дата встречи
+  hostSlots             Json?         // Снимок слотов хоста (legacy)
+  proposedDate          DateTime?     // Предложенная дата (до подтверждения)
+  proposedBy            Int?          // userId того, кто предложил
+  schedulingStatus      String        @default("PENDING") // "PENDING" | "PROPOSED" | "CONFIRMED"
+  
+  // Поля для чата и пушей
+  lastMessageAt         DateTime?     // Время последнего сообщения
+  hostLastReadAt        DateTime      @default(now()) // Когда хост читал чат
+  participantLastReadAt DateTime      @default(now()) // Когда напарник читал
+  hostNotifiedAt        DateTime      @default(now()) // Когда хосту слали пуш
+  participantNotifiedAt DateTime      @default(now()) // Когда напарнику слали пуш
+  
+  createdAt             DateTime      @default(now())
+  messages              Message[]     
+}
+
+model Message {
+  id        Int        @id @default(autoincrement())
+  matchId   Int
+  senderId  Int
+  text      String
+  createdAt DateTime   @default(now())
+  match     QuestLobby @relation(fields: [matchId], references: [id]) // Связь с лобби
+}
+
+model TimeSlot {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  dayOfWeek Int      // 0=Пн, 1=Вт, ... 6=Вс
+  timeFrom  String   // "19:00"
+  timeTo    String   // "22:00"
+  createdAt DateTime @default(now())
+}
