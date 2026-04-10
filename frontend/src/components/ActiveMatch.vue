@@ -78,10 +78,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, computed, nextTick, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { io, Socket } from 'socket.io-client';
 import { API_URL } from '../config';
+import { track } from '../analytics';
 
 const route = useRoute();
 const router = useRouter();
@@ -170,6 +171,7 @@ async function loadMatch() {
     socket.on('newMessage', (msg) => {
       messages.value.push(msg);
       scrollToBottom();
+      track('message_received', { matchId: route.params.id });
       markAsRead();
     });
     markAsRead();
@@ -181,6 +183,7 @@ async function loadMatch() {
 function sendMessage() {
   if (!newMessage.value.trim() || !socket) return;
   socket.emit('sendMessage', { matchId: match.value.id, text: newMessage.value.trim() });
+  track('message_sent', { matchId: route.params.id });
   newMessage.value = '';
 }
 
@@ -192,6 +195,7 @@ async function setStatus(status: 'COMPLETED' | 'FAILED') {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ status }),
   });
+  track('match_status_updated', { matchId: route.params.id, status });
   router.push('/dashboard');
 }
 

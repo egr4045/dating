@@ -118,6 +118,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { io, Socket } from 'socket.io-client';
 import { API_URL } from '../config';
+import { track } from '../analytics';
 
 const route = useRoute();
 const router = useRouter();
@@ -178,11 +179,13 @@ async function loadMatch() {
 async function proposeDate() {
   submitting.value = true;
   const token = localStorage.getItem('token');
+  const date = new Date(proposedDateInput.value);
   await fetch(`${API_URL}/quests/match/${matchId}/propose-date`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ proposedDate: new Date(proposedDateInput.value).toISOString() }),
+    body: JSON.stringify({ proposedDate: date.toISOString() }),
   });
+  track('date_proposed', { matchId: route.params.id, date: date });
   await loadMatch();
   submitting.value = false;
 }

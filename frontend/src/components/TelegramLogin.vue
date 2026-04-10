@@ -53,6 +53,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { API_URL } from '../config';
+import { track } from '../analytics';
 
 const router = useRouter();
 const loginToken = ref('');
@@ -68,6 +69,7 @@ async function getCode() {
     const res = await fetch(`${API_URL}/auth/generate`);
     const data = await res.json();
     loginToken.value = data.token;
+    track('login_start');
     startPolling();
   } catch { /* ignore */ }
 }
@@ -82,6 +84,7 @@ function startPolling() {
         clearInterval(pollInterval!);
         localStorage.setItem('token', data.jwt);
         localStorage.setItem('userId', String(data.user.id));
+        track('login_success');
         router.push('/onboarding');
       } else if (data.status === 'expired') {
         clearInterval(pollInterval!);
@@ -102,6 +105,7 @@ async function handleTestLogin() {
     const data = await res.json();
     localStorage.setItem('token', data.token);
     localStorage.setItem('userId', String(data.user.id));
+    track('test_login', { name: testName.value });
     router.push(!data.user.interests?.length ? '/onboarding' : '/dashboard');
   } catch { /* ignore */ }
 }

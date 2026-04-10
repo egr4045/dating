@@ -1,0 +1,185 @@
+/* ─── Общие стили для всех страниц Admin Panel ───────────── */
+
+.admin-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  font-family: 'Nunito', system-ui, sans-serif;
+  color: #e5e7eb;
+}
+
+.admin-page-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.admin-page-header h1 { font-size: 1.5rem; font-weight: 800; color: #fff; margin: 0; }
+.header-meta { margin-left: auto; font-size: 0.875rem; color: #6b7280; }
+
+.back-btn {
+  background: transparent;
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+  padding: 6px 12px;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+.back-btn:hover { border-color: #6366f1; color: #818cf8; }
+
+.admin-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.admin-search {
+  flex: 1;
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: #e5e7eb;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.admin-search:focus { border-color: #6366f1; }
+.admin-search::placeholder { color: #4b5563; }
+
+.admin-loading {
+  color: #6b7280;
+  font-size: 0.9rem;
+  padding: 40px;
+  text-align: center;
+}
+
+.admin-empty {
+  color: #4b5563;
+  font-size: 0.875rem;
+  padding: 20px 0;
+  text-align: center;
+}
+
+/* ─── Карточка ─── */
+.admin-card {
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.admin-card h3 { font-size: 0.95rem; font-weight: 700; color: #9ca3af; margin: 0; }
+
+/* ─── Таблица ─── */
+.admin-table-wrap {
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #2a2d3a;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.admin-table thead th {
+  background: #1a1d27;
+  color: #6b7280;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid #2a2d3a;
+}
+.admin-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #1e2130;
+  vertical-align: middle;
+}
+.admin-table tbody tr:last-child td { border-bottom: none; }
+.admin-table__row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.admin-table__row:hover { background: #1e2130; }
+
+/* Ячейки */
+.cell-id { color: #4b5563; font-size: 0.8rem; }
+.cell-muted { color: #6b7280; }
+.cell-center { text-align: center; }
+.cell-name { font-weight: 700; color: #e5e7eb; }
+
+/* ─── Статус-бейджи ─── */
+.status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: #1e2130;
+  color: #6b7280;
+}
+.status-active { background: rgba(126, 200, 160, 0.12); color: #7ec8a0; }
+.status-banned  { background: rgba(232, 124, 124, 0.12); color: #e87c7c; }
+.status-waiting { background: rgba(245, 197, 138, 0.12); color: #f5c58a; }
+
+/* ─── Репутация ─── */
+.rep { font-weight: 700; }
+.rep-good { color: #7ec8a0; }
+.rep-mid  { color: #f5c58a; }
+.rep-bad  { color: #e87c7c; }
+
+/* ─── Интересы ─── */
+.interests-wrap { display: flex; flex-wrap: wrap; gap: 4px; }
+.interest-chip {
+  background: rgba(99, 102, 241, 0.1);
+  color: #818cf8;
+  border-radius: 100px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.interest-more { background: #1e2130; color: #6b7280; }
+
+/* ─── Пагинация ─── */
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+.page-info { font-size: 0.875rem; color: #6b7280; }
+.admin-btn-sm {
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+  padding: 6px 14px;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 0.825rem;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+.admin-btn-sm:hover:not(:disabled) { border-color: #6366f1; color: #818cf8; }
+.admin-btn-sm:disabled { opacity: 0.3; pointer-events: none; }
+
+/* ─── Кнопки действий ─── */
+.admin-btn-danger {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 8px 16px;
+  color: #f87171;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+.admin-btn-danger:hover { background: rgba(239, 68, 68, 0.2); }

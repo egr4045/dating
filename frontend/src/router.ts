@@ -6,9 +6,19 @@ import ActiveMatch from './components/ActiveMatch.vue';
 import SchedulingScreen from './components/SchedulingScreen.vue';
 import Settings from './components/Settings.vue';
 import History from './components/History.vue';
+import AdminLogin from './components/admin/AdminLogin.vue';
+import AdminLayout from './components/admin/AdminLayout.vue';
+import AdminUsers from './components/admin/AdminUsers.vue';
+import AdminUserDetail from './components/admin/AdminUserDetail.vue';
+import AdminMatches from './components/admin/AdminMatches.vue';
+import AdminMatchDetail from './components/admin/AdminMatchDetail.vue';
+import AdminChats from './components/admin/AdminChats.vue';
+import AdminAnalytics from './components/admin/AdminAnalytics.vue';
 import { API_URL } from './config';
+import { track } from './analytics';
 
 const routes = [
+  // ── Пользовательские маршруты ──────────────────────────────────────────────
   { path: '/', component: TelegramLogin },
   { path: '/onboarding', component: Onboarding },
   { path: '/dashboard', component: Dashboard },
@@ -16,6 +26,27 @@ const routes = [
   { path: '/match/:id', component: ActiveMatch },
   { path: '/settings', component: Settings },
   { path: '/history', component: History },
+
+  // ── Админка (отдельная ветка) ───────────────────────────────────────────────
+  {
+    path: '/admin/login',
+    component: AdminLogin,
+    meta: { isAdmin: true, isAdminPublic: true },
+  },
+  {
+    path: '/admin',
+    component: AdminLayout,
+    meta: { isAdmin: true },
+    children: [
+      { path: '', redirect: '/admin/users' },
+      { path: 'users', component: AdminUsers, meta: { isAdmin: true } },
+      { path: 'users/:id', component: AdminUserDetail, meta: { isAdmin: true } },
+      { path: 'matches', component: AdminMatches, meta: { isAdmin: true } },
+      { path: 'matches/:id', component: AdminMatchDetail, meta: { isAdmin: true } },
+      { path: 'chats', component: AdminChats, meta: { isAdmin: true } },
+      { path: 'analytics', component: AdminAnalytics, meta: { isAdmin: true } },
+    ],
+  },
 ];
 
 export const router = createRouter({
@@ -24,6 +55,22 @@ export const router = createRouter({
 });
 
 router.beforeEach(async (to, _from, next) => {
+  // ── Разветвление: Admin vs User ────────────────────────────────────────────
+
+  if (to.meta.isAdmin) {
+    // Публичная страница логина в админку
+    if (to.meta.isAdminPublic) return next();
+
+    // Проверяем наличие adminToken
+    const adminToken = localStorage.getItem('adminToken');
+    if (!adminToken) return next('/admin/login');
+
+    // Можно было бы проверить токен на сервере, но для простоты — доверяем localStorage
+    // (Токен подписан отдельным секретом, срок 12ч)
+    return next();
+  }
+
+  // ── Пользовательские маршруты ──────────────────────────────────────────────
   const isPublic = to.path === '/';
   const token = localStorage.getItem('token');
 
@@ -41,15 +88,13 @@ router.beforeEach(async (to, _from, next) => {
     const res = await fetch(`${API_URL}/users/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    
+
     if (!res.ok) {
-      // Токен невалиден или просрочен
       localStorage.removeItem('token');
       localStorage.removeItem('userId');
       return next('/');
     }
   } catch (error) {
-    // Ошибка сети или CORS — в целях безопасности кидаем на логин
     console.error('Auth verification failed:', error);
     return next('/');
   }
@@ -66,6 +111,9 @@ router.beforeEach(async (to, _from, next) => {
       }
     } catch { /* игнорируем ошибки при проверке статуса мэтча */ }
   }
+
+  // Трекинг просмотра страниц
+  track('page_view', { path: to.path });
 
   next();
 });

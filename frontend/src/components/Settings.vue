@@ -87,6 +87,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { API_URL } from '../config';
+import { track } from '../analytics';
 
 const loading = ref(true);
 const savingInterests = ref(false);
@@ -170,6 +171,7 @@ async function saveInterests() {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ interests: selectedInterests.value }),
   });
+  track('settings_interests_save');
   savingInterests.value = false;
 }
 
@@ -182,6 +184,7 @@ async function savePreferences() {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ prefGender: prefGender.value }),
   });
+  track('settings_profile_save');
   savingPrefs.value = false;
 }
 

@@ -102,3 +102,16 @@ model TimeSlot {
   timeTo    String   // "22:00"
   createdAt DateTime @default(now())
 }
+
+model AnalyticsEvent {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  sessionId String
+  event     String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([event])
+  @@index([userId])
+  @@index([createdAt])
+}

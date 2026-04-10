@@ -109,6 +109,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { io, Socket } from 'socket.io-client';
 import { API_URL } from '../config';
+import { track } from '../analytics';
 import QuestCard from './QuestCard.vue';
 
 const router = useRouter();
@@ -147,7 +148,9 @@ async function loadQuests() {
       return;
     }
 
-    quests.value = await res.json();
+    const data = await res.json();
+    quests.value = data;
+    track('feed_load', { count: data.length });
   } catch {
     quests.value = [];
   } finally {
@@ -157,6 +160,7 @@ async function loadQuests() {
 
 async function onLike(questId: string) {
   if (!questId) return;
+  track('swipe_like', { questId });
   quests.value = quests.value.filter(q => q.id !== questId);
 
   const token = localStorage.getItem('token');

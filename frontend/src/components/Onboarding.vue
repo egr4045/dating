@@ -210,9 +210,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { API_URL } from '../config';
+import { track } from '../analytics';
 import VideoRecorder from './VideoRecorder.vue';
 
 const router = useRouter();
@@ -220,6 +221,14 @@ const step = ref(0);
 const totalSteps = 7;
 const saving = ref(false);
 const videoRecorded = ref(false);
+
+watch(step, (newStep) => {
+  track('onboarding_step', { step: newStep });
+});
+
+onMounted(() => {
+  track('onboarding_start');
+});
 
 const form = ref({
   firstName: '',
@@ -351,6 +360,7 @@ async function finish() {
     });
   }
 
+  track('onboarding_complete');
   saving.value = false;
   router.push('/dashboard');
 }
