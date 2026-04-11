@@ -3,9 +3,22 @@ import { NestFactory, HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // ── Валидация критических переменных окружения ─────────────────────────────
+  if (!process.env.JWT_SECRET) {
+    throw new Error('❌  JWT_SECRET не задан. Запуск отклонён — это уязвимость безопасности.');
+  }
+  if (!process.env.FRONTEND_URL) {
+    console.warn('⚠️   FRONTEND_URL не задан — CORS будет разрешать только localhost.');
+  }
+
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
+    prefix: '/uploads/',
+  });
   
   const { httpAdapter } = app.get(HttpAdapterHost);
   app.useGlobalFilters(new AllExceptionsFilter(app.get(HttpAdapterHost)));
@@ -27,7 +40,6 @@ async function bootstrap() {
       const allowedPatterns = [
         /^http:\/\/localhost(:\d+)?$/,
         /^http:\/\/127\.0\.0\.1(:\d+)?$/,
-        /^http:\/\/192\.168\.\d+\.\d+(:\d+)?$/
       ];
 
       const isAllowed = allowedPatterns.some(pattern => pattern.test(origin)) 

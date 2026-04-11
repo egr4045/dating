@@ -10,7 +10,10 @@
       <nav class="admin-nav">
         <router-link v-for="item in navItems" :key="item.path" :to="item.path" class="admin-nav__item">
           <span class="admin-nav__icon">{{ item.icon }}</span>
-          <span class="admin-nav__label">{{ item.label }}</span>
+          <span class="admin-nav__label" style="display:flex; align-items:center; gap:6px;">
+            {{ item.label }}
+            <span v-if="item.id === 'verifications' && pendingCount > 0" class="nav-badge">{{ pendingCount }}</span>
+          </span>
         </router-link>
       </nav>
 
@@ -27,16 +30,39 @@
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { API_URL } from '../../config';
 
 const router = useRouter();
+const pendingCount = ref(0);
 
 const navItems = [
-  { path: '/admin/users', icon: '👤', label: 'Пользователи' },
-  { path: '/admin/matches', icon: '🤝', label: 'Матчи' },
-  { path: '/admin/chats', icon: '💬', label: 'Чаты' },
-  { path: '/admin/analytics', icon: '📊', label: 'Аналитика' },
+  { id: 'users', path: '/admin/users',    icon: '👤', label: 'Пользователи' },
+  { id: 'verifications', path: '/admin/verifications', icon: '📹', label: 'Верификации' },
+  { id: 'matches', path: '/admin/matches',  icon: '🤝', label: 'Матчи' },
+  { id: 'chats', path: '/admin/chats',    icon: '💬', label: 'Чаты' },
+  { id: 'quests', path: '/admin/quests',   icon: '🃏', label: 'Карточки' },
+  { id: 'analytics', path: '/admin/analytics',icon: '📊', label: 'Аналитика' },
 ];
+
+async function checkPending() {
+  const token = localStorage.getItem('adminToken');
+  if (!token) return;
+  try {
+    const res = await fetch(`${API_URL}/admin/users?pendingVideo=true&limit=1`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json();
+    pendingCount.value = data.total || 0;
+  } catch {}
+}
+
+onMounted(() => {
+  checkPending();
+  // Можем обновлять раз в минуту
+  setInterval(checkPending, 60000);
+});
 
 function logout() {
   localStorage.removeItem('adminToken');
@@ -118,5 +144,15 @@ function logout() {
   overflow-y: auto;
   padding: 32px;
   min-width: 0;
+}
+
+.nav-badge {
+  background: #ef4444;
+  color: white;
+  font-size: 0.70rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 10px;
+  line-height: 1;
 }
 </style>

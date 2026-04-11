@@ -41,10 +41,7 @@
       </button>
 
       <template v-if="state === 'done'">
-        <button class="btn btn-success" @click="submitVideo" :disabled="uploading">
-          {{ uploading ? 'Отправка...' : '✅ Отправить' }}
-        </button>
-        <button class="btn btn-ghost btn-sm" @click="retake">Снова</button>
+        <button class="btn btn-ghost btn-sm" @click="retake">🔄 Перезаписать</button>
       </template>
     </div>
 
@@ -58,12 +55,11 @@
 <script setup lang="ts">
 import { ref, onUnmounted } from 'vue';
 
-const emit = defineEmits<{ (e: 'recorded', videoUrl: string): void }>();
+const emit = defineEmits<{ (e: 'update:blob', videoBlob: Blob | null): void }>();
 
 type State = 'idle' | 'recording' | 'done';
 const state = ref<State>('idle');
 const error = ref('');
-const uploading = ref(false);
 const timer = ref(0);
 const recordedUrl = ref('');
 const recordedBlob = ref<Blob | null>(null);
@@ -111,6 +107,7 @@ function finalize() {
   recordedBlob.value = new Blob(chunks, { type: mimeType });
   recordedUrl.value = URL.createObjectURL(recordedBlob.value);
   state.value = 'done';
+  emit('update:blob', recordedBlob.value);
 }
 
 function retake() {
@@ -119,20 +116,7 @@ function retake() {
   recordedBlob.value = null;
   state.value = 'idle';
   timer.value = 0;
-}
-
-async function submitVideo() {
-  if (!recordedBlob.value) return;
-  uploading.value = true;
-
-  // Конвертируем в base64 и отдаём родителю
-  const reader = new FileReader();
-  reader.onload = () => {
-    const dataUrl = reader.result as string;
-    emit('recorded', dataUrl);
-    uploading.value = false;
-  };
-  reader.readAsDataURL(recordedBlob.value);
+  emit('update:blob', null);
 }
 
 function stopStream() {

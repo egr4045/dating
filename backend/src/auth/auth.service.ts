@@ -7,8 +7,6 @@ import { Telegraf, Markup } from 'telegraf';
 @Injectable()
 export class AuthService implements OnModuleInit {
   private bot: Telegraf;
-  // Временное хранилище в памяти: token -> { status, jwt, user }
-  private loginSessions = new Map<string, any>();
 
   constructor(
     private prisma: PrismaService,
@@ -36,37 +34,51 @@ export class AuthService implements OnModuleInit {
         console.log('Получена команда /start от:', ctx.from.username);
         const payload = ctx.message.text.split(' ')[1];
 
-        if (payload && this.loginSessions.has(payload)) {
-          const tgUser = ctx.from;
-          
-          let user = await this.prisma.user.findUnique({
-            where: { telegramId: tgUser.id.toString() },
+        if (payload) {
+          const session = await this.prisma.loginSession.findUnique({
+            where: { token: payload },
           });
 
-          if (!user) {
-            user = await this.prisma.user.create({
-              data: {
-                telegramId: tgUser.id.toString(),
-                firstName: tgUser.first_name,
-                username: tgUser.username,
-              },
+          if (session && session.expiresAt > new Date() && session.status === 'pending') {
+            const tgUser = ctx.from;
+            
+            let user = await this.prisma.user.findUnique({
+              where: { telegramId: tgUser.id.toString() },
             });
+
+            if (!user) {
+              user = await this.prisma.user.create({
+                data: {
+                  telegramId: tgUser.id.toString(),
+                  firstName: tgUser.first_name,
+                  username: tgUser.username,
+                },
+              });
+            }
+
+            const jwt = this.jwtService.sign(
+              { sub: user.id, telegramId: user.telegramId },
+              { expiresIn: '7d' },
+            );
+
+            await this.prisma.loginSession.update({
+              where: { token: payload },
+              data: { status: 'authenticated', jwt, userId: user.id },
+            });
+
+            const frontendUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:4173';
+            
+            await ctx.reply(
+                `Привет, ${user.firstName}! Ты успешно вошел.\n\nНажми кнопку ниже или перейди по ссылке:\n${frontendUrl}`,
+                Markup.inlineKeyboard([
+                    Markup.button.url('Вернуться на сайт 🚀', frontendUrl)
+                ])
+            );
+            return;
           }
-
-          const jwt = this.jwtService.sign({ sub: user.id, telegramId: user.telegramId });
-          this.loginSessions.set(payload, { status: 'authenticated', jwt, user });
-
-          const frontendUrl = process.env.FRONTEND_URL || 'http://127.0.0.1:4173';
-          
-          await ctx.reply(
-              `Привет, ${user.firstName}! Ты успешно вошел.\n\nНажми кнопку ниже или перейди по ссылке:\n${frontendUrl}`,
-              Markup.inlineKeyboard([
-                  Markup.button.url('Вернуться на сайт 🚀', frontendUrl)
-              ])
-          );
-        } else {
-          ctx.reply('Привет! Я бот Party Finder. Чтобы войти на сайт, нажми кнопку логина там.');
         }
+        
+        ctx.reply('Привет! Я бот Party Finder. Чтобы войти на сайт, нажми кнопку логина там.');
       });
 
       this.bot.launch()
@@ -79,24 +91,36 @@ export class AuthService implements OnModuleInit {
   }
 
   // Генерация уникального кода для фронтенда
-  generateLoginCode() {
+  async generateLoginCode() {
     const token = uuidv4();
-    this.loginSessions.set(token, { status: 'pending' });
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 минут
     
-    // Удаляем код через 5 минут, чтобы не засорять память
-    setTimeout(() => this.loginSessions.delete(token), 5 * 60 * 1000);
+    await this.prisma.loginSession.create({
+      data: { token, status: 'pending', expiresAt },
+    });
     
     return { token };
   }
 
-  // Фронтенд будет стучаться сюда каждую секунду и спрашивать "Ну что?"
-  checkStatus(token: string) {
-    const session = this.loginSessions.get(token);
-    if (!session) return { status: 'expired' };
+  // Фронтенд будет стучаться сюда каждую секунду
+  async checkStatus(token: string) {
+    const session = await this.prisma.loginSession.findUnique({
+      where: { token },
+      include: { user: true }
+    });
+
+    if (!session || session.expiresAt < new Date()) {
+      return { status: 'expired' };
+    }
     
     if (session.status === 'authenticated') {
-      this.loginSessions.delete(token); // Одноразовый код отдаем только один раз
-      return session;
+      // Отдаем токен только один раз и удаляем сессию за ненадобностью
+      await this.prisma.loginSession.delete({ where: { token } });
+      return {
+        status: session.status,
+        jwt: session.jwt,
+        user: session.user
+      };
     }
     
     return { status: 'pending' };

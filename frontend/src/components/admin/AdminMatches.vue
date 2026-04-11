@@ -110,7 +110,7 @@ async function loadMatches() {
 
   try {
     const res = await fetch(`${API_URL}/admin/matches?${params}`, {
-      headers: { 'X-Admin-Token': token ?? '' },
+      headers: { Authorization: `Bearer ${token || ''}` },
     });
     const data = await res.json();
     matches.value = data.matches;

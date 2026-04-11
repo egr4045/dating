@@ -18,6 +18,7 @@ model User {
   reputation      Float    @default(5.0)
   interests       String[]
   bannedUntil     DateTime?
+  loginSessions   LoginSession[]
 
   // Профиль
   age             Int?
@@ -61,9 +62,9 @@ model QuestLobby {
   templateId            String
   template              QuestTemplate @relation(fields: [templateId], references: [id])
   hostId                Int
-  host                  User          @relation("Host", fields: [hostId], references: [id])
+  host                  User          @relation("Host", fields: [hostId], references: [id], onDelete: Cascade)
   participantId         Int?
-  participant           User?         @relation("Participant", fields: [participantId], references: [id])
+  participant           User?         @relation("Participant", fields: [participantId], references: [id], onDelete: SetNull)
   status                String        @default("WAITING")
   
   // Поля для согласования даты встречи
@@ -81,7 +82,11 @@ model QuestLobby {
   participantNotifiedAt DateTime      @default(now()) // Когда напарнику слали пуш
   
   createdAt             DateTime      @default(now())
-  messages              Message[]     
+  messages              Message[]
+
+  @@index([hostId])
+  @@index([participantId])
+  @@index([status, createdAt])
 }
 
 model Message {
@@ -90,17 +95,22 @@ model Message {
   senderId  Int
   text      String
   createdAt DateTime   @default(now())
-  match     QuestLobby @relation(fields: [matchId], references: [id]) // Связь с лобби
+  match     QuestLobby @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([senderId])
 }
 
 model TimeSlot {
   id        Int      @id @default(autoincrement())
   userId    Int
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   dayOfWeek Int      // 0=Пн, 1=Вт, ... 6=Вс
   timeFrom  String   // "19:00"
   timeTo    String   // "22:00"
   createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model AnalyticsEvent {
@@ -114,4 +124,17 @@ model AnalyticsEvent {
   @@index([event])
   @@index([userId])
   @@index([createdAt])
+}
+
+model LoginSession {
+  token     String   @id
+  status    String   @default("pending") // "pending" | "authenticated"
+  jwt       String?
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([token])
+  @@index([expiresAt])
 }

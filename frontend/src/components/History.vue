@@ -27,17 +27,28 @@
         </div>
       </div>
 
+      <!-- Фильтр-табы -->
+      <div class="filter-tabs">
+        <button
+          v-for="tab in tabs"
+          :key="tab.value"
+          class="filter-tab"
+          :class="{ active: activeTab === tab.value }"
+          @click="activeTab = tab.value"
+        >{{ tab.label }}</button>
+      </div>
+
       <!-- Пусто -->
-      <div v-if="history.length === 0" class="empty-state">
+      <div v-if="filteredHistory.length === 0" class="empty-state">
         <div style="font-size:3rem">📭</div>
-        <h3>Пока нет встреч</h3>
-        <p>Свайпай события на главной — и история появится здесь</p>
-        <button class="btn btn-outline btn-sm" @click="$router.push('/dashboard')">Смотреть события</button>
+        <h3>{{ activeTab === 'all' ? 'Пока нет встреч' : 'Нет записей в этой категории' }}</h3>
+        <p v-if="activeTab === 'all'">Свайпай события на главной — и история появится здесь</p>
+        <button v-if="activeTab === 'all'" class="btn btn-outline btn-sm" @click="$router.push('/dashboard')">Смотреть события</button>
       </div>
 
       <!-- Список -->
       <div class="history-list">
-        <div v-for="item in history" :key="item.id" class="history-item card card-sm">
+        <div v-for="item in filteredHistory" :key="item.id" class="history-item card card-sm">
           <div class="history-item__icon">{{ statusIcon(item.status) }}</div>
           <div class="history-item__body">
             <div class="history-item__title">{{ item.title }}</div>
@@ -71,6 +82,19 @@ interface HistoryItem {
 const loading = ref(true);
 const history = ref<HistoryItem[]>([]);
 const reputation = ref(5.0);
+const activeTab = ref<'all' | 'completed' | 'failed'>('all');
+
+const tabs = [
+  { value: 'all',       label: 'Все' },
+  { value: 'completed', label: '✅ Состоялись' },
+  { value: 'failed',    label: '❌ Сорвались' },
+] as const;
+
+const filteredHistory = computed(() => {
+  if (activeTab.value === 'all') return history.value;
+  const status = activeTab.value === 'completed' ? 'COMPLETED' : 'FAILED';
+  return history.value.filter(i => i.status === status);
+});
 
 const repPercent = computed(() => Math.min(100, Math.max(0, (reputation.value / 10) * 100)));
 const repClass = computed(() => {
@@ -154,4 +178,29 @@ onMounted(loadData);
 .delta-zero { color: var(--text-muted); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Фильтр-табы */
+.filter-tabs {
+  display: flex;
+  gap: 6px;
+}
+.filter-tab {
+  flex: 1;
+  padding: 8px 6px;
+  border-radius: var(--radius-sm);
+  border: 2px solid #EDE8E5;
+  background: var(--surface);
+  font-family: var(--font);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.filter-tab.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
 </style>

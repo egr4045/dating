@@ -22,10 +22,25 @@
 
     <!-- Основная лента -->
     <template v-else>
-      <div class="cards-area">
-        <div v-if="loading" class="empty-state anim-fade-in">
-          <div class="loading-spinner">🌀</div>
-          <p>Загружаем события...</p>
+      <!-- Pull-to-refresh индикатор -->
+      <div v-if="pullRefreshing" class="ptr-indicator">
+        <div class="ptr-spinner" />
+      </div>
+
+      <div class="cards-area"
+        @touchstart.passive="onTouchStart"
+        @touchmove.passive="onTouchMove"
+        @touchend.passive="onTouchEnd"
+      >
+        <div v-if="loading" class="skeleton-stack">
+          <div class="skeleton-quest-card">
+            <div class="skeleton skeleton-img" />
+            <div class="skeleton-quest-info">
+              <div class="skeleton skeleton-text" style="width:60%" />
+              <div class="skeleton skeleton-title" style="width:80%; margin-top:4px" />
+              <div class="skeleton skeleton-text" style="width:45%; margin-top:8px" />
+            </div>
+          </div>
         </div>
 
         <div v-else-if="quests.length === 0" class="empty-state anim-fade-in">
@@ -64,7 +79,38 @@
         <button class="action-btn action-btn--nope" @click="onNope(quests[quests.length - 1]?.id)">✕</button>
         <button class="action-btn action-btn--like" @click="onLike(quests[quests.length - 1]?.id)">✓</button>
       </div>
+
+      <!-- Кнопка отмены свайпа -->
+      <Teleport to="body">
+        <Transition name="undo">
+          <button v-if="showUndo" class="undo-btn" @click="undoSwipe">↩ Вернуть</button>
+        </Transition>
+      </Teleport>
     </template>
+
+    <!-- Confirm-диалог выхода -->
+    <Teleport to="body">
+      <div v-if="showLogoutConfirm" class="confirm-overlay" @click.self="showLogoutConfirm = false">
+        <div class="confirm-card anim-scale-in">
+          <div style="font-size:2rem">👋</div>
+          <h3>Выйти из аккаунта?</h3>
+          <p>Тебе придётся войти снова через Telegram.</p>
+          <div class="confirm-btns">
+            <button class="btn btn-ghost btn-sm" @click="showLogoutConfirm = false">Отмена</button>
+            <button class="btn btn-danger btn-sm" @click="doLogout">Выйти</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Тост-уведомления -->
+    <Teleport to="body">
+      <Transition name="toast">
+        <div v-if="toast" :class="['toast-msg', `toast-msg--${toast.type}`]">
+          {{ toast.message }}
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- Фильтры (дровер) -->
     <Teleport to="body">
@@ -89,11 +135,33 @@
           </div>
 
           <div class="field-group">
+            <label class="input-label">Категория активности</label>
+            <div class="category-chips">
+              <button
+                v-for="cat in categoryOptions"
+                :key="cat.value"
+                class="chip"
+                :class="filters.category === cat.value ? 'chip-active' : 'chip-default'"
+                @click="filters.category = cat.value"
+              >{{ cat.emoji }} {{ cat.label }}</button>
+            </div>
+          </div>
+
+          <div class="field-group">
             <label class="input-label">Возраст: {{ filters.ageMin }}–{{ filters.ageMax }} лет</label>
             <div class="age-range-row">
               <input type="range" min="16" max="60" v-model.number="filters.ageMin" class="age-slider" />
               <input type="range" min="16" max="60" v-model.number="filters.ageMax" class="age-slider" />
             </div>
+          </div>
+
+          <div class="field-group">
+            <label class="toggle-row">
+              <span class="input-label" style="margin-bottom:0">Только сегодня</span>
+              <div class="toggle-switch" :class="{ on: filters.todayOnly }" @click="filters.todayOnly = !filters.todayOnly">
+                <div class="toggle-thumb" />
+              </div>
+            </label>
           </div>
 
           <button class="btn btn-primary btn-full" @click="applyFilters">Применить</button>
@@ -119,11 +187,55 @@ const isBanned = ref(false);
 const banDateFormatted = ref('');
 const showFilters = ref(false);
 
-const filters = ref({ prefGender: 'any', ageMin: 16, ageMax: 60 });
+const filters = ref({ prefGender: 'any', ageMin: 16, ageMax: 60, category: 'all', todayOnly: false });
+
+// ── Pull-to-refresh ───────────────────────────────────────────────────────
+const pullRefreshing = ref(false);
+let touchStartY = 0;
+function onTouchStart(e: TouchEvent) { touchStartY = e.touches[0].clientY; }
+function onTouchMove() { /* passive — just track */ }
+async function onTouchEnd(e: TouchEvent) {
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if (dy > 80 && !loading.value) {
+    pullRefreshing.value = true;
+    track('pull_to_refresh');
+    await loadQuests();
+    pullRefreshing.value = false;
+  }
+}
+
+// ── Undo свайпа ────────────────────────────────────────────────────────────
+const lastNopedQuest = ref<any>(null);
+const showUndo = ref(false);
+let undoTimer: ReturnType<typeof setTimeout> | null = null;
+
+function undoSwipe() {
+  if (!lastNopedQuest.value) return;
+  quests.value.push(lastNopedQuest.value);
+  lastNopedQuest.value = null;
+  showUndo.value = false;
+  if (undoTimer) clearTimeout(undoTimer);
+  track('swipe_undo');
+}
+
+// ── Тосты ──────────────────────────────────────────────────────────────────
+const toast = ref<{ message: string; type: 'error' | 'success' } | null>(null);
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+function showToast(message: string, type: 'error' | 'success' = 'error') {
+  if (toastTimer) clearTimeout(toastTimer);
+  toast.value = { message, type };
+  toastTimer = setTimeout(() => { toast.value = null; }, 3500);
+}
 const prefGenderOptions = [
   { value: 'any', emoji: '🌟', label: 'Любой' },
   { value: 'male', emoji: '👦', label: 'Парень' },
   { value: 'female', emoji: '👧', label: 'Девушка' },
+];
+const categoryOptions = [
+  { value: 'all',     emoji: '✨', label: 'Все' },
+  { value: 'offline', emoji: '🌍', label: 'Активности' },
+  { value: 'games',   emoji: '🎮', label: 'Игры' },
+  { value: 'online',  emoji: '📱', label: 'Онлайн' },
 ];
 
 let socket: Socket | null = null;
@@ -134,7 +246,14 @@ async function loadQuests() {
   if (!token) { router.push('/'); return; }
 
   try {
-    const res = await fetch(`${API_URL}/quests/feed`, {
+    const params = new URLSearchParams({
+      prefGender: filters.value.prefGender,
+      ageMin: String(filters.value.ageMin),
+      ageMax: String(filters.value.ageMax),
+      ...(filters.value.category !== 'all' ? { category: filters.value.category } : {}),
+      ...(filters.value.todayOnly ? { todayOnly: 'true' } : {}),
+    });
+    const res = await fetch(`${API_URL}/quests/feed?${params}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -161,10 +280,12 @@ async function loadQuests() {
 async function onLike(questId: string) {
   if (!questId) return;
   track('swipe_like', { questId });
-  quests.value = quests.value.filter(q => q.id !== questId);
 
   const token = localStorage.getItem('token');
   if (!token) return;
+
+  // Оптимистично убираем карточку из стека
+  quests.value = quests.value.filter(q => q.id !== questId);
 
   try {
     const res = await fetch(`${API_URL}/quests/swipe`, {
@@ -172,19 +293,40 @@ async function onLike(questId: string) {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ questId, action: 'like' }),
     });
-    const data = await res.json();
 
+    if (!res.ok) {
+      // Возвращаем карточку обратно при ошибке сервера
+      await loadQuests();
+      showToast('Не удалось отправить лайк. Попробуй ещё раз.', 'error');
+      return;
+    }
+
+    const data = await res.json();
     if (data.status === 'matched') {
       router.push(`/match/${data.match.id}/schedule`);
     } else if (data.status === 'already_matched') {
       router.push(`/match/${data.matchId}/schedule`);
     }
-  } catch { /* ignore */ }
+  } catch {
+    await loadQuests();
+    showToast('Нет соединения. Проверь интернет.', 'error');
+  }
 }
 
 function onNope(questId: string) {
   if (!questId) return;
+  track('swipe_nope', { questId });
+  const quest = quests.value.find(q => q.id === questId);
   quests.value = quests.value.filter(q => q.id !== questId);
+  if (quest) {
+    lastNopedQuest.value = quest;
+    showUndo.value = true;
+    if (undoTimer) clearTimeout(undoTimer);
+    undoTimer = setTimeout(() => {
+      showUndo.value = false;
+      lastNopedQuest.value = null;
+    }, 4000);
+  }
 }
 
 function applyFilters() {
@@ -192,7 +334,13 @@ function applyFilters() {
   loadQuests();
 }
 
+const showLogoutConfirm = ref(false);
+
 function logout() {
+  showLogoutConfirm.value = true;
+}
+
+function doLogout() {
   localStorage.removeItem('token');
   localStorage.removeItem('userId');
   router.push('/');
@@ -244,8 +392,13 @@ onUnmounted(() => { socket?.disconnect(); });
   text-align: center;
   padding: 40px 20px;
 }
-.loading-spinner { font-size: 2.5rem; animation: spin 1.2s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.skeleton-stack { width: 100%; max-width: 360px; }
+.skeleton-quest-card {
+  width: 100%; border-radius: var(--radius); overflow: hidden;
+  background: var(--surface); box-shadow: var(--shadow);
+}
+.skeleton-img { width: 100%; height: 300px; border-radius: 0; }
+.skeleton-quest-info { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
 
 .swipe-hints {
   display: flex;
@@ -317,4 +470,101 @@ onUnmounted(() => { socket?.disconnect(); });
 
 .ban-screen { align-items: center; justify-content: center; text-align: center; }
 .ban-icon { font-size: 4rem; }
+
+/* Pull-to-refresh */
+.ptr-indicator {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 0;
+}
+@keyframes ptr-spin { to { transform: rotate(360deg); } }
+.ptr-spinner {
+  width: 24px; height: 24px;
+  border: 3px solid var(--primary-soft);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: ptr-spin 0.7s linear infinite;
+}
+
+.confirm-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(61, 53, 53, 0.45); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.confirm-card {
+  background: var(--surface); border-radius: var(--radius);
+  padding: 28px 24px; width: 100%; max-width: 320px;
+  display: flex; flex-direction: column; gap: 12px; text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+.confirm-card h3 { margin: 0; }
+.confirm-card p  { font-size: 0.9rem; }
+.confirm-btns { display: flex; gap: 10px; margin-top: 4px; }
+.confirm-btns .btn { flex: 1; }
+
+.toast-msg {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 20px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-weight: 600;
+  z-index: 200;
+  max-width: 340px;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+.toast-msg--error { background: var(--danger); color: #fff; }
+.toast-msg--success { background: var(--success); color: #fff; }
+.toast-enter-active, .toast-leave-active { transition: opacity 0.25s, transform 0.25s; }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(12px); }
+
+/* Undo-кнопка */
+.undo-btn {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: #fff;
+  border: none;
+  border-radius: 100px;
+  padding: 10px 22px;
+  font-family: var(--font);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  z-index: 150;
+  box-shadow: var(--shadow-lg);
+  white-space: nowrap;
+}
+.undo-enter-active, .undo-leave-active { transition: opacity 0.2s, transform 0.2s; }
+.undo-enter-from, .undo-leave-to { opacity: 0; transform: translateX(-50%) translateY(8px); }
+
+/* Категории в фильтрах */
+.category-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Тогл */
+.toggle-row { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+.toggle-switch {
+  width: 44px; height: 26px;
+  background: #EDE8E5;
+  border-radius: 100px;
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.toggle-switch.on { background: var(--primary); }
+.toggle-thumb {
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+.toggle-switch.on .toggle-thumb { transform: translateX(18px); }
 </style>

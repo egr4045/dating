@@ -72,7 +72,7 @@ const loading = ref(true);
 async function load() {
   const token = localStorage.getItem('adminToken');
   const res = await fetch(`${API_URL}/admin/matches/${route.params.id}`, {
-    headers: { 'X-Admin-Token': token ?? '' },
+    headers: { Authorization: `Bearer ${token || ''}` },
   });
   match.value = await res.json();
   loading.value = false;

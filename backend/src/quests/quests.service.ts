@@ -27,30 +27,61 @@ export class QuestsService {
 
     // Показываем лобби только если они "свежие" (созданы не более 15 минут назад)
     const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
-    const allTemplates = await this.prisma.questTemplate.findMany({
-      include: {
-        lobbies: {
-          where: { 
-            status: 'WAITING', 
-            hostId: { not: userId },
-            createdAt: { gte: fifteenMinsAgo }
-          }
-        }
-      }
-    });
+    const interests = currentUser.interests.length > 0 ? currentUser.interests : ['_unlikely_interest_'];
+    
+    let results = [];
 
-    return allTemplates.sort((a, b) => {
-      const aIsPref = currentUser.interests.includes(a.subcategory);
-      const bIsPref = currentUser.interests.includes(b.subcategory);
-      const aHasWait = a.lobbies.length > 0;
-      const bHasWait = b.lobbies.length > 0;
-      if ((aHasWait && aIsPref) && !(bHasWait && bIsPref)) return -1;
-      if (!(aHasWait && aIsPref) && (bHasWait && bIsPref)) return 1;
-      if ((!aHasWait && aIsPref) && !(!bHasWait && bIsPref)) return -1;
-      if (!(!aHasWait && aIsPref) && (!bHasWait && bIsPref)) return 1;
-      if (!(aHasWait && !aIsPref) && (bHasWait && !bIsPref)) return 1;
-      return 0;
-    }).slice(0, 20);
+    // Приоритет 1: Есть активные лобби + совпадает по интересам
+    const tier1 = await this.prisma.questTemplate.findMany({
+      where: {
+        subcategory: { in: interests },
+        lobbies: { some: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } }
+      },
+      include: { lobbies: { where: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } } },
+      take: 20
+    });
+    results.push(...tier1);
+
+    // Приоритет 2: Есть активные лобби + НЕ совпадает по интересам
+    if (results.length < 20) {
+      const tier2 = await this.prisma.questTemplate.findMany({
+        where: {
+          subcategory: { notIn: interests },
+          lobbies: { some: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } }
+        },
+        include: { lobbies: { where: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } } },
+        take: 20 - results.length
+      });
+      results.push(...tier2);
+    }
+
+    // Приоритет 3: НЕТ активных лобби + совпадает по интересам
+    if (results.length < 20) {
+      const tier3 = await this.prisma.questTemplate.findMany({
+        where: {
+          subcategory: { in: interests },
+          lobbies: { none: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } }
+        },
+        include: { lobbies: { where: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } } },
+        take: 20 - results.length
+      });
+      results.push(...tier3);
+    }
+
+    // Приоритет 4: НЕТ активных лобби + НЕ совпадает по интересам
+    if (results.length < 20) {
+      const tier4 = await this.prisma.questTemplate.findMany({
+        where: {
+          subcategory: { notIn: interests },
+          lobbies: { none: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } }
+        },
+        include: { lobbies: { where: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } } },
+        take: 20 - results.length
+      });
+      results.push(...tier4);
+    }
+
+    return results;
   }
 
   async handleSwipe(userId: number, questId: string, action: 'like' | 'dislike') {
@@ -60,57 +91,67 @@ export class QuestsService {
     const template = await this.prisma.questTemplate.findUnique({ where: { id: questId } });
     if (!template) return { status: 'error', message: 'Quest template not found' };
 
-    // ЗАЩИТА: Проверяем, нет ли у юзера уже активного мэтча
+    // ЗАЩИТА: быстрая проверка активного мэтча (вне транзакции)
     const activeMatch = await this.prisma.questLobby.findFirst({
-      where: {
-        status: 'MATCHED',
-        OR: [{ hostId: userId }, { participantId: userId }]
-      }
+      where: { status: 'MATCHED', OR: [{ hostId: userId }, { participantId: userId }] },
     });
-
     if (activeMatch) {
       return { status: 'already_matched', matchId: activeMatch.id };
     }
 
-    // Ищем ГОРЯЧЕГО напарника (заявке не больше 15 минут)
-    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
-    const existingLobby = await this.prisma.questLobby.findFirst({
-      where: { 
-        templateId: questId, 
-        status: 'WAITING', 
-        hostId: { not: userId },
-        createdAt: { gte: fifteenMinsAgo }
-      },
-    });
+    // Вся логика матчинга — в транзакции, исключаем рейс-кондишн
+    const txResult = await this.prisma.$transaction(async (tx) => {
+      const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
 
-    if (existingLobby) {
-      // Прямой матч — оба лайкнули одно событие
-      const updateResult = await this.prisma.questLobby.updateMany({
+      const existingLobby = await tx.questLobby.findFirst({
+        where: {
+          templateId: questId,
+          status: 'WAITING',
+          hostId: { not: userId },
+          createdAt: { gte: fifteenMinsAgo },
+        },
+      });
+
+      if (!existingLobby) {
+        // Никого нет — создаём своё лобби
+        await tx.questLobby.create({
+          data: { templateId: questId, hostId: userId, status: 'WAITING' },
+        });
+        return { status: 'waiting' as const };
+      }
+
+      // Атомарно захватываем лобби
+      const updateResult = await tx.questLobby.updateMany({
         where: { id: existingLobby.id, status: 'WAITING' },
         data: { participantId: userId, status: 'MATCHED', schedulingStatus: 'PENDING' },
       });
 
       if (updateResult.count === 0) {
-        // Race condition — лобби уже занято, создаём своё
-        await this.prisma.questLobby.create({
+        // Лобби захвачено параллельным запросом — создаём своё
+        await tx.questLobby.create({
           data: { templateId: questId, hostId: userId, status: 'WAITING' },
         });
-        return { status: 'waiting' };
+        return { status: 'waiting' as const };
       }
 
-      const match = await this.prisma.questLobby.findUnique({
+      const match = await tx.questLobby.findUnique({
         where: { id: existingLobby.id },
-        include: { host: true, participant: true, template: true }
+        include: { host: true, participant: true, template: true },
       });
-      if (!match) return { status: 'error' };
+      if (!match) return { status: 'error' as const };
 
-      // Отменяем другие ожидания обоих
-      await this.prisma.questLobby.updateMany({
+      // Отменяем другие ожидания обоих пользователей
+      await tx.questLobby.updateMany({
         where: { status: 'WAITING', hostId: { in: [userId, match.hostId] } },
-        data: { status: 'CANCELLED' }
+        data: { status: 'CANCELLED' },
       });
 
-      // Уведомляем обоих
+      return { status: 'matched' as const, match };
+    });
+
+    // Сайд-эффекты вне транзакции (сокеты, Telegram-пуши)
+    if (txResult.status === 'matched' && txResult.match) {
+      const { match } = txResult;
       this.chatGateway.server.to(`user_${match.hostId}`).emit('matchFound', match.id);
       this.chatGateway.server.to(`user_${userId}`).emit('matchFound', match.id);
 
@@ -118,23 +159,16 @@ export class QuestsService {
       if (participant) {
         this.notifications.sendTelegramPush(
           match.host.telegramId,
-          `🎉 Мэтч! ${participant.firstName} тоже хочет "${match.template.title}". Выберите дату!`
+          `🎉 Мэтч! ${participant.firstName} тоже хочет "${match.template.title}". Выберите дату!`,
         );
         this.notifications.sendTelegramPush(
           participant.telegramId,
-          `🎉 Мэтч! ${match.host.firstName} тоже хочет "${match.template.title}". Выберите дату!`
+          `🎉 Мэтч! ${match.host.firstName} тоже хочет "${match.template.title}". Выберите дату!`,
         );
       }
-
-      return { status: 'matched', match };
     }
 
-    // Никого нет — создаём своё лобби
-    await this.prisma.questLobby.create({
-      data: { templateId: questId, hostId: userId, status: 'WAITING' },
-    });
-
-    return { status: 'waiting' };
+    return txResult;
   }
 
   // Пользователь выбрал слот и подтвердил метч
@@ -219,13 +253,29 @@ export class QuestsService {
   async getMatch(matchId: number) {
     return this.prisma.questLobby.findUnique({
       where: { id: matchId },
-      include: { 
-        host: true, 
-        participant: true, 
+      include: {
+        host: true,
+        participant: true,
         template: true,
-        messages: { orderBy: { createdAt: 'asc' } }
-      }
+        // Грузим последние 50 сообщений — дальше через /messages?cursor=
+        messages: { orderBy: { createdAt: 'desc' }, take: 50 },
+      },
     });
+  }
+
+  // Пагинация сообщений через курсор (для подгрузки истории вверх)
+  async getMessages(matchId: number, userId: number, cursor?: number) {
+    const lobby = await this.prisma.questLobby.findUnique({ where: { id: matchId } });
+    if (!lobby || (lobby.hostId !== userId && lobby.participantId !== userId)) return null;
+
+    const messages = await this.prisma.message.findMany({
+      where: { matchId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+
+    return messages.reverse(); // возвращаем в хронологическом порядке
   }
 
   async getActiveMatch(userId: number) {
@@ -241,32 +291,37 @@ export class QuestsService {
     const match = await this.prisma.questLobby.findUnique({ where: { id: matchId } });
     if (!match) return null;
 
-    // Обновляем статус
-    const updated = await this.prisma.questLobby.update({
-      where: { id: matchId },
-      data: { status }
-    });
-
-    // Начисление/снятие очков репутации
     const reputationDelta = status === 'COMPLETED' ? 0.5 : -1.0;
-    const userIds = [match.hostId];
-    if (match.participantId) userIds.push(match.participantId);
+    const userIds = [match.hostId, ...(match.participantId ? [match.participantId] : [])];
+    const banUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    for (const uid of userIds) {
-      const user = await this.prisma.user.update({
-        where: { id: uid },
-        data: { reputation: { increment: reputationDelta } }
-      });
+    // Всё в одной транзакции: статус матча + репутация + бан
+    const [updated] = await this.prisma.$transaction([
+      // 1. Обновляем статус матча
+      this.prisma.questLobby.update({ where: { id: matchId }, data: { status } }),
+    ]);
 
-      // Проверка на бан: если репутация упала ниже 2.0 — бан на 30 дней
-      if (user.reputation < 2.0 && !user.bannedUntil) {
-        const banUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        await this.prisma.user.update({
+    // 2. Обновляем репутацию каждого участника атомарно (read → clamp → write)
+    await this.prisma.$transaction(async (tx) => {
+      for (const uid of userIds) {
+        const current = await tx.user.findUnique({
           where: { id: uid },
-          data: { bannedUntil: banUntil }
+          select: { reputation: true, bannedUntil: true },
+        });
+        if (!current) continue;
+
+        const newReputation = Math.max(0, current.reputation + reputationDelta);
+
+        await tx.user.update({
+          where: { id: uid },
+          data: {
+            reputation: newReputation,
+            // Бан: если упала ниже 2.0 и ещё не забанен
+            ...(newReputation < 2.0 && !current.bannedUntil ? { bannedUntil: banUntil } : {}),
+          },
         });
       }
-    }
+    });
 
     return updated;
   }

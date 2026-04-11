@@ -6,12 +6,12 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Get('generate')
-  generateToken() {
+  async generateToken() {
     return this.authService.generateLoginCode();
   }
 
   @Get('status')
-  checkStatus(@Query('token') token: string) {
+  async checkStatus(@Query('token') token: string) {
     return this.authService.checkStatus(token);
   }
 }

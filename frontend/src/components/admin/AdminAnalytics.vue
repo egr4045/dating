@@ -136,7 +136,7 @@ async function loadSummary() {
 
   try {
     const res = await fetch(`${API_URL}/admin/analytics/summary?${params}`, {
-      headers: { 'X-Admin-Token': token ?? '' },
+      headers: { Authorization: `Bearer ${token || ''}` },
     });
     summary.value = await res.json();
   } finally {

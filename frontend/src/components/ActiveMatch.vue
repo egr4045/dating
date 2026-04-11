@@ -49,13 +49,21 @@
           v-for="msg in messages"
           :key="msg.id"
           :class="['message-bubble', msg.senderId === currentUserId ? 'my-message' : 'partner-message']"
-        >{{ msg.text }}</div>
+        >
+          <span>{{ msg.text }}</span>
+          <span v-if="msg.senderId === currentUserId" class="read-tick" :class="{ read: msg.readByPartner }">✓✓</span>
+        </div>
+        <!-- Индикатор набора -->
+        <div v-if="isPartnerTyping" class="message-bubble partner-message typing-bubble">
+          <span class="typing-dot" /><span class="typing-dot" /><span class="typing-dot" />
+        </div>
       </div>
 
       <div class="chat-input-area">
         <input
           v-model="newMessage"
           @keyup.enter="sendMessage"
+          @input="onTyping"
           placeholder="Сообщение..."
           class="input chat-input"
         />
@@ -73,6 +81,23 @@
         <button class="btn btn-success" :disabled="!canFinish" @click="finishMatch">🎉 Всё прошло!</button>
       </div>
     </div>
+
+    <!-- Confirm-диалог завершения матча -->
+    <Teleport to="body">
+      <div v-if="confirmDialog" class="confirm-overlay" @click.self="confirmDialog = null">
+        <div class="confirm-card anim-scale-in">
+          <div class="confirm-icon">{{ confirmDialog.icon }}</div>
+          <h3>{{ confirmDialog.title }}</h3>
+          <p>{{ confirmDialog.text }}</p>
+          <div class="confirm-btns">
+            <button class="btn btn-ghost btn-sm" @click="confirmDialog = null">Отмена</button>
+            <button :class="['btn btn-sm', confirmDialog.btnClass]" @click="confirmDialog.onConfirm()">
+              {{ confirmDialog.btnLabel }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
   </div>
 </template>
@@ -93,6 +118,15 @@ const newMessage = ref('');
 const chatContainer = ref<HTMLElement | null>(null);
 const canFinish = ref(false);
 const timeRemaining = ref('15:00');
+const confirmDialog = ref<{
+  icon: string; title: string; text: string;
+  btnLabel: string; btnClass: string; onConfirm: () => void;
+} | null>(null);
+
+// Typing indicator
+const isPartnerTyping = ref(false);
+let partnerTypingTimer: ReturnType<typeof setTimeout> | null = null;
+let typingThrottle: ReturnType<typeof setTimeout> | null = null;
 
 let socket: Socket;
 let timerInterval: ReturnType<typeof setInterval> | null = null;
@@ -173,6 +207,21 @@ async function loadMatch() {
       scrollToBottom();
       track('message_received', { matchId: route.params.id });
       markAsRead();
+      // сбрасываем индикатор "печатает" при получении сообщения
+      isPartnerTyping.value = false;
+      if (partnerTypingTimer) clearTimeout(partnerTypingTimer);
+    });
+    socket.on('partnerTyping', () => {
+      isPartnerTyping.value = true;
+      if (partnerTypingTimer) clearTimeout(partnerTypingTimer);
+      partnerTypingTimer = setTimeout(() => { isPartnerTyping.value = false; }, 3000);
+      scrollToBottom();
+    });
+    socket.on('messagesRead', () => {
+      // Помечаем все мои сообщения как прочитанные
+      messages.value = messages.value.map(m =>
+        m.senderId === currentUserId ? { ...m, readByPartner: true } : m
+      );
     });
     markAsRead();
   } catch (e) {
@@ -180,16 +229,29 @@ async function loadMatch() {
   }
 }
 
+function onTyping() {
+  if (!socket || !match.value) return;
+  // Throttle: не чаще раза в 2 секунды
+  if (typingThrottle) return;
+  socket.emit('typing', { matchId: match.value.id });
+  typingThrottle = setTimeout(() => { typingThrottle = null; }, 2000);
+}
+
 function sendMessage() {
-  if (!newMessage.value.trim() || !socket) return;
-  socket.emit('sendMessage', { matchId: match.value.id, text: newMessage.value.trim() });
+  const text = newMessage.value.trim();
+  if (!text || !socket) return;
+  // Очищаем input только после отправки в сокет
+  socket.emit('sendMessage', { matchId: match.value.id, text });
   track('message_sent', { matchId: route.params.id });
   newMessage.value = '';
+  // сбрасываем throttle при отправке
+  if (typingThrottle) { clearTimeout(typingThrottle); typingThrottle = null; }
 }
 
 async function setStatus(status: 'COMPLETED' | 'FAILED') {
   const token = localStorage.getItem('token');
   if (!canFinish.value || !token) return;
+  confirmDialog.value = null;
   await fetch(`${API_URL}/quests/match/${match.value.id}/status`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -199,12 +261,33 @@ async function setStatus(status: 'COMPLETED' | 'FAILED') {
   router.push('/dashboard');
 }
 
-function cancelMatch() { setStatus('FAILED'); }
-function finishMatch() { setStatus('COMPLETED'); }
+function cancelMatch() {
+  confirmDialog.value = {
+    icon: '😔',
+    title: 'Встреча сорвалась?',
+    text: 'Это снизит репутацию обоих участников. Действие нельзя отменить.',
+    btnLabel: 'Да, сорвалось',
+    btnClass: 'btn-danger',
+    onConfirm: () => setStatus('FAILED'),
+  };
+}
+
+function finishMatch() {
+  confirmDialog.value = {
+    icon: '🎉',
+    title: 'Встреча прошла?',
+    text: 'Отметь завершение — это повысит вашу репутацию. Действие нельзя отменить.',
+    btnLabel: 'Да, всё прошло!',
+    btnClass: 'btn-success',
+    onConfirm: () => setStatus('COMPLETED'),
+  };
+}
 
 onMounted(loadMatch);
 onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval);
+  if (partnerTypingTimer) clearTimeout(partnerTypingTimer);
+  if (typingThrottle) clearTimeout(typingThrottle);
   if (socket) socket.disconnect();
 });
 </script>
@@ -336,4 +419,54 @@ onUnmounted(() => {
 }
 .finish-btns { display: flex; gap: 12px; }
 .finish-btns .btn { flex: 1; }
+
+.confirm-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(61, 53, 53, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.confirm-card {
+  background: var(--surface); border-radius: var(--radius);
+  padding: 28px 24px; width: 100%; max-width: 340px;
+  display: flex; flex-direction: column; gap: 12px; text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+.confirm-icon { font-size: 2.5rem; }
+.confirm-card h3 { margin: 0; }
+.confirm-card p { font-size: 0.9rem; }
+.confirm-btns { display: flex; gap: 10px; margin-top: 4px; }
+.confirm-btns .btn { flex: 1; }
+
+/* Read receipts */
+.message-bubble { display: flex; align-items: flex-end; gap: 4px; }
+.my-message { flex-direction: row-reverse; }
+.read-tick {
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.5);
+  line-height: 1;
+  flex-shrink: 0;
+  margin-bottom: 1px;
+}
+.read-tick.read { color: rgba(255,255,255,0.95); }
+
+/* Typing indicator */
+.typing-bubble {
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+@keyframes typing-bounce {
+  0%, 80%, 100% { transform: scale(0.7); opacity: 0.5; }
+  40%            { transform: scale(1);   opacity: 1; }
+}
+.typing-dot {
+  width: 7px; height: 7px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  animation: typing-bounce 1.2s infinite ease-in-out;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
 </style>

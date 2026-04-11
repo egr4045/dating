@@ -194,11 +194,7 @@
       <h1>Видео-верификация</h1>
       <p>5–10 секунд записи подтверждают, что ты реальный человек. Видео видят только модераторы.</p>
 
-      <VideoRecorder @recorded="onVideoRecorded" />
-
-      <div v-if="videoRecorded" class="badge badge-success" style="align-self:center">
-        ✅ Видео отправлено на проверку
-      </div>
+      <VideoRecorder @update:blob="b => videoBlob = b" />
 
       <button class="btn btn-primary btn-full" @click="finish" :disabled="saving">
         {{ saving ? 'Сохранение...' : 'Завершить →' }}
@@ -220,15 +216,9 @@ const router = useRouter();
 const step = ref(0);
 const totalSteps = 7;
 const saving = ref(false);
-const videoRecorded = ref(false);
+const videoBlob = ref<Blob | null>(null);
 
-watch(step, (newStep) => {
-  track('onboarding_step', { step: newStep });
-});
-
-onMounted(() => {
-  track('onboarding_start');
-});
+const DRAFT_KEY = 'onboarding_draft';
 
 const form = ref({
   firstName: '',
@@ -243,6 +233,44 @@ const form = ref({
 });
 
 const selectedInterests = ref<string[]>([]);
+
+// Автосохранение: запись в localStorage при любом изменении
+function saveDraft() {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      step: step.value,
+      form: { ...form.value, photoUrl: '' }, // не сохраняем base64 фото
+      selectedInterests: selectedInterests.value,
+    }));
+  } catch { /* localStorage может быть заполнен */ }
+}
+
+function restoreDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    const draft = JSON.parse(raw);
+    if (draft.step) step.value = draft.step;
+    if (draft.form) Object.assign(form.value, draft.form);
+    if (draft.selectedInterests) selectedInterests.value = draft.selectedInterests;
+  } catch { /* игнорируем повреждённый черновик */ }
+}
+
+watch([step, form, selectedInterests], saveDraft, { deep: true });
+
+watch(step, (newStep) => {
+  track('onboarding_step', { step: newStep });
+});
+
+onMounted(() => {
+  restoreDraft();
+  track('onboarding_start');
+});
+
+// Чистим черновик после завершения онбординга (вызывается в finish())
+function clearDraft() {
+  localStorage.removeItem(DRAFT_KEY);
+}
 const photoInput = ref<HTMLInputElement>();
 const photoPreview = ref('');
 
@@ -318,16 +346,7 @@ const rules = [
   { emoji: '😊', title: 'Уважение', text: 'Это просто знакомство и совместный досуг. Без давления.' },
 ];
 
-function onVideoRecorded(videoUrl: string) {
-  videoRecorded.value = true;
-  const token = localStorage.getItem('token');
-  if (!token) return;
-  fetch(`${API_URL}/users/video`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ videoUrl }),
-  });
-}
+// (удален onVideoRecorded)
 
 async function finish() {
   saving.value = true;
@@ -360,7 +379,22 @@ async function finish() {
     });
   }
 
+  if (videoBlob.value) {
+    const formData = new FormData();
+    formData.append('video', videoBlob.value, 'verification.webm');
+    try {
+      await fetch(`${API_URL}/users/video`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+    } catch {
+      console.error('Ошибка загрузки видео');
+    }
+  }
+
   track('onboarding_complete');
+  clearDraft();
   saving.value = false;
   router.push('/dashboard');
 }

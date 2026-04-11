@@ -7,14 +7,18 @@ export class AdminAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const token = request.headers['x-admin-token'];
+    const authHeader = request.headers['authorization'];
 
-    if (!token) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       throw new UnauthorizedException('Admin token not provided');
     }
 
+    const token = authHeader.split(' ')[1];
+
     try {
-      const secret = process.env.ADMIN_JWT_SECRET || 'admin-secret';
+      const secret = process.env.ADMIN_JWT_SECRET;
+      if (!secret) throw new Error('ADMIN_JWT_SECRET missing');
+      
       const payload = await this.jwtService.verifyAsync(token, { secret });
       request.admin = payload;
     } catch {

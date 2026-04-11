@@ -68,7 +68,7 @@ async function loadChats() {
 
   try {
     const res = await fetch(`${API_URL}/admin/chats?${params}`, {
-      headers: { 'X-Admin-Token': token ?? '' },
+      headers: { Authorization: `Bearer ${token || ''}` },
     });
     const data = await res.json();
     chats.value = data.chats;

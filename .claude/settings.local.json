@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n 'transaction\\\\|$transaction\\\\|Prisma' /d/dev/dating/backend/src/quests/quests.service.ts)",
+      "Bash(grep -rn '$transaction' /d/dev/dating/backend/src/)",
+      "Bash(npx prisma:*)",
+      "Bash(ls /mnt/)",
+      "Read(//d//**)",
+      "Bash(wslpath -u \"D:\\\\dev\\\\dating\\\\backend\")",
+      "Bash(PRISMA_MIGRATE_SKIP_GENERATE=true npx prisma db push)",
+      "Bash(npx tsc:*)",
+      "Read(//mnt/d/**)",
+      "Read(//d/dev//**)"
+    ]
+  }
+}

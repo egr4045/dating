@@ -36,6 +36,9 @@
         <div class="badge badge-warning" style="margin-left:auto">🔒 Анкета после встречи</div>
       </div>
 
+      <!-- Ошибка API -->
+      <div v-if="errorMsg" class="error-banner">⚠️ {{ errorMsg }}</div>
+
       <!-- Статус согласования -->
       <div class="scheduling-card card">
 
@@ -131,6 +134,7 @@ const submitting = ref(false);
 const proposedDateInput = ref('');
 const counterDateInput = ref('');
 const showCounter = ref(false);
+const errorMsg = ref('');
 
 let socket: Socket | null = null;
 
@@ -177,33 +181,55 @@ async function loadMatch() {
 }
 
 async function proposeDate() {
+  errorMsg.value = '';
   submitting.value = true;
   const token = localStorage.getItem('token');
-  const date = new Date(proposedDateInput.value);
-  await fetch(`${API_URL}/quests/match/${matchId}/propose-date`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ proposedDate: date.toISOString() }),
-  });
-  track('date_proposed', { matchId: route.params.id, date: date });
-  await loadMatch();
-  submitting.value = false;
+  try {
+    const date = new Date(proposedDateInput.value);
+    const res = await fetch(`${API_URL}/quests/match/${matchId}/propose-date`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ proposedDate: date.toISOString() }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      errorMsg.value = err.message ?? 'Не удалось предложить дату. Попробуй ещё раз.';
+      return;
+    }
+    track('date_proposed', { matchId: route.params.id, date });
+    await loadMatch();
+  } catch {
+    errorMsg.value = 'Нет соединения. Проверь интернет.';
+  } finally {
+    submitting.value = false;
+  }
 }
 
 async function confirmDate(accept: boolean) {
+  errorMsg.value = '';
   submitting.value = true;
   const token = localStorage.getItem('token');
-  const body: any = { accept };
-  if (!accept && counterDateInput.value) {
-    body.counterDate = new Date(counterDateInput.value).toISOString();
+  try {
+    const body: any = { accept };
+    if (!accept && counterDateInput.value) {
+      body.counterDate = new Date(counterDateInput.value).toISOString();
+    }
+    const res = await fetch(`${API_URL}/quests/match/${matchId}/confirm-date`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      errorMsg.value = err.message ?? 'Не удалось подтвердить дату. Попробуй ещё раз.';
+      return;
+    }
+    await loadMatch();
+  } catch {
+    errorMsg.value = 'Нет соединения. Проверь интернет.';
+  } finally {
+    submitting.value = false;
   }
-  await fetch(`${API_URL}/quests/match/${matchId}/confirm-date`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  await loadMatch();
-  submitting.value = false;
 }
 
 async function resetProposal() {
@@ -289,6 +315,16 @@ onUnmounted(() => { socket?.disconnect(); });
 }
 
 .field-group { display: flex; flex-direction: column; gap: 8px; }
+
+.error-banner {
+  background: var(--danger-soft, #fde8e8);
+  color: var(--danger, #e87c7c);
+  border: 1px solid var(--danger, #e87c7c);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
 
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>

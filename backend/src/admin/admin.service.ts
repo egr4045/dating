@@ -12,14 +12,22 @@ export class AdminService {
   // ── Авторизация ────────────────────────────────────────────────────────────
 
   async login(login: string, password: string) {
-    const expectedLogin = process.env.ADMIN_LOGIN || 'admin';
-    const expectedPassword = process.env.ADMIN_PASSWORD || 'changeme';
+    const expectedLogin = process.env.ADMIN_LOGIN;
+    const expectedPassword = process.env.ADMIN_PASSWORD;
+
+    if (!expectedLogin || !expectedPassword) {
+      throw new Error('Критическая ошибка: креды администратора не заданы в .env!');
+    }
 
     if (login !== expectedLogin || password !== expectedPassword) {
       throw new UnauthorizedException('Неверный логин или пароль');
     }
 
-    const secret = process.env.ADMIN_JWT_SECRET || 'admin-secret';
+    const secret = process.env.ADMIN_JWT_SECRET;
+    if (!secret) {
+      throw new Error('Критическая ошибка: ADMIN_JWT_SECRET не задан в .env!');
+    }
+
     const token = this.jwtService.sign(
       { role: 'admin', login },
       { secret, expiresIn: '12h' },
@@ -30,8 +38,8 @@ export class AdminService {
 
   // ── Пользователи ───────────────────────────────────────────────────────────
 
-  async getUsers(search?: string, page = 1, limit = 30) {
-    const where = search
+  async getUsers(search?: string, page = 1, limit = 30, pendingVideo?: boolean) {
+    const where: any = search
       ? {
           OR: [
             { firstName: { contains: search, mode: 'insensitive' as const } },
@@ -40,6 +48,11 @@ export class AdminService {
           ],
         }
       : {};
+
+    if (pendingVideo) {
+      where.videoUrl = { not: null };
+      where.videoVerified = false;
+    }
 
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -99,6 +112,43 @@ export class AdminService {
     return { ...user, waitingLobbies };
   }
 
+  async verifyUser(userId: number) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (user?.videoUrl) {
+      // Пытаемся удалить физический файл
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const filename = user.videoUrl.split('/').pop();
+        if (filename) fs.unlinkSync(path.join(__dirname, '..', '..', 'uploads', 'videos', filename));
+      } catch (e) {
+        console.warn('Не удалось удалить файл видео', e);
+      }
+    }
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { videoVerified: true, videoUrl: null },
+    });
+  }
+
+  async rejectVideo(userId: number) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (user?.videoUrl) {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const filename = user.videoUrl.split('/').pop();
+        if (filename) fs.unlinkSync(path.join(__dirname, '..', '..', 'uploads', 'videos', filename));
+      } catch (e) {
+        console.warn('Не удалось удалить файл видео', e);
+      }
+    }
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { videoVerified: false, videoUrl: null },
+    });
+  }
+
   async banUser(userId: number, days: number) {
     const banUntil = days > 0
       ? new Date(Date.now() + days * 24 * 60 * 60 * 1000)
@@ -111,22 +161,93 @@ export class AdminService {
   }
 
   async deleteUser(userId: number) {
-    // Удаляем сначала зависимые записи
-    await this.prisma.message.deleteMany({
-      where: {
-        OR: [
-          { match: { hostId: userId } },
-          { match: { participantId: userId } },
-          { senderId: userId },
-        ],
+    // AnalyticsEvent не имеет внешнего ключа с каскадом, поэтому удаляем вручную
+    await this.prisma.analyticsEvent.deleteMany({ where: { userId } });
+    
+    // Удаляем сообщения, которые юзер отправил как Participant (т.к. каскада нет)
+    await this.prisma.message.deleteMany({ where: { senderId: userId } });
+    
+    // Лобби хоста удалятся через Cascade, но лобби где он участник - нет. 
+    // Удаляем их, чтобы не плодить мертвые мэтчи.
+    await this.prisma.questLobby.deleteMany({ where: { participantId: userId } });
+    
+    // TimeSlots и HostedLobbies удалятся каскадно автоматически через Prisma
+    return this.prisma.user.delete({ where: { id: userId } });
+  }
+
+  // ── Карточки (QuestTemplate) ───────────────────────────────────────────────
+
+  async getQuests(search?: string, category?: string, page = 1, limit = 50) {
+    const where: any = {};
+    if (search) {
+      where.OR = [
+        { title:       { contains: search, mode: 'insensitive' } },
+        { subcategory: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    if (category && category !== 'all') where.category = category;
+
+    const [quests, total] = await Promise.all([
+      this.prisma.questTemplate.findMany({
+        where,
+        orderBy: { title: 'asc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { _count: { select: { lobbies: true } } },
+      }),
+      this.prisma.questTemplate.count({ where }),
+    ]);
+
+    return { quests, total, page, limit };
+  }
+
+  async createQuest(data: {
+    id: string; title: string; description: string;
+    category: string; subcategory: string;
+    imageUrl?: string; address?: string; price?: string; paymentRule?: string;
+  }) {
+    return this.prisma.questTemplate.create({ data: {
+      id:          data.id.trim(),
+      title:       data.title.trim(),
+      description: data.description.trim(),
+      category:    data.category,
+      subcategory: data.subcategory.trim(),
+      imageUrl:    data.imageUrl   || null,
+      address:     data.address    || null,
+      price:       data.price      || null,
+      paymentRule: data.paymentRule || '50/50',
+    }});
+  }
+
+  async updateQuest(id: string, data: {
+    title?: string; description?: string;
+    category?: string; subcategory?: string;
+    imageUrl?: string; address?: string; price?: string; paymentRule?: string;
+  }) {
+    return this.prisma.questTemplate.update({
+      where: { id },
+      data: {
+        ...(data.title       !== undefined && { title:       data.title.trim()       }),
+        ...(data.description !== undefined && { description: data.description.trim() }),
+        ...(data.category    !== undefined && { category:    data.category           }),
+        ...(data.subcategory !== undefined && { subcategory: data.subcategory.trim() }),
+        ...(data.imageUrl    !== undefined && { imageUrl:    data.imageUrl || null   }),
+        ...(data.address     !== undefined && { address:     data.address  || null   }),
+        ...(data.price       !== undefined && { price:       data.price    || null   }),
+        ...(data.paymentRule !== undefined && { paymentRule: data.paymentRule        }),
       },
     });
-    await this.prisma.questLobby.deleteMany({
-      where: { OR: [{ hostId: userId }, { participantId: userId }] },
+  }
+
+  async deleteQuest(id: string) {
+    // Проверяем, нет ли активных матчей
+    const activeLobbies = await this.prisma.questLobby.count({
+      where: { templateId: id, status: { in: ['WAITING', 'MATCHED'] } },
     });
-    await this.prisma.timeSlot.deleteMany({ where: { userId } });
-    await this.prisma.analyticsEvent.deleteMany({ where: { userId } });
-    return this.prisma.user.delete({ where: { id: userId } });
+    if (activeLobbies > 0) {
+      throw new Error(`Нельзя удалить: есть ${activeLobbies} активных лобби`);
+    }
+    return this.prisma.questTemplate.delete({ where: { id } });
   }
 
   // ── Матчи ──────────────────────────────────────────────────────────────────
@@ -245,8 +366,8 @@ export class AdminService {
       completedMatches,
       totalSwipeLikes,
       totalSwiperNopes,
-      conversion: totalSwipeLikes > 0
-        ? ((newMatches / totalSwipeLikes) * 100).toFixed(1) + '%'
+      conversion: (totalSwipeLikes + totalSwiperNopes) > 0
+        ? ((newMatches / (totalSwipeLikes + totalSwiperNopes)) * 100).toFixed(1) + '%'
         : '0%',
       eventBreakdown: eventBreakdown.map(e => ({ event: e.event, count: e._count.event })),
       dailyEvents: dailyEvents.map(d => ({ day: d.day, count: Number(d.count) })),
@@ -277,7 +398,7 @@ export class AdminService {
 
   // Топ активных юзеров за период
   async getTopUsers(from: Date, to: Date, limit = 20) {
-    return this.prisma.analyticsEvent.groupBy({
+    const rows = await this.prisma.analyticsEvent.groupBy({
       by: ['userId'],
       where: {
         createdAt: { gte: from, lte: to },
@@ -287,5 +408,19 @@ export class AdminService {
       orderBy: { _count: { userId: 'desc' } },
       take: limit,
     });
+
+    const userIds = rows.map(r => r.userId as number);
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, firstName: true, username: true },
+    });
+    const userMap = new Map(users.map(u => [u.id, u]));
+
+    return rows.map(r => ({
+      userId: r.userId,
+      eventCount: r._count.userId,
+      firstName: userMap.get(r.userId as number)?.firstName ?? null,
+      username: userMap.get(r.userId as number)?.username ?? null,
+    }));
   }
 }

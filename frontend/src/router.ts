@@ -14,6 +14,8 @@ import AdminMatches from './components/admin/AdminMatches.vue';
 import AdminMatchDetail from './components/admin/AdminMatchDetail.vue';
 import AdminChats from './components/admin/AdminChats.vue';
 import AdminAnalytics from './components/admin/AdminAnalytics.vue';
+import AdminQuests from './components/admin/AdminQuests.vue';
+import AdminVerifications from './components/admin/AdminVerifications.vue';
 import { API_URL } from './config';
 import { track } from './analytics';
 
@@ -40,11 +42,13 @@ const routes = [
     children: [
       { path: '', redirect: '/admin/users' },
       { path: 'users', component: AdminUsers, meta: { isAdmin: true } },
+      { path: 'verifications', component: AdminVerifications, meta: { isAdmin: true } },
       { path: 'users/:id', component: AdminUserDetail, meta: { isAdmin: true } },
       { path: 'matches', component: AdminMatches, meta: { isAdmin: true } },
       { path: 'matches/:id', component: AdminMatchDetail, meta: { isAdmin: true } },
       { path: 'chats', component: AdminChats, meta: { isAdmin: true } },
       { path: 'analytics', component: AdminAnalytics, meta: { isAdmin: true } },
+      { path: 'quests', component: AdminQuests, meta: { isAdmin: true } },
     ],
   },
 ];

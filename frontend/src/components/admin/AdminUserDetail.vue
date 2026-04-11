@@ -20,6 +20,15 @@
           <div class="detail-row"><span>Пол</span><b>{{ user.gender ?? '—' }}</b></div>
           <div class="detail-row"><span>Город</span><b>{{ user.city ?? '—' }}</b></div>
           <div class="detail-row"><span>Репутация</span><b :class="reputationClass(user.reputation)">⭐ {{ user.reputation.toFixed(1) }}</b></div>
+          <div class="detail-row">
+            <span>Верификация видео</span>
+            <div style="text-align: right">
+              <b :class="user.videoVerified ? 'rep rep-good' : 'rep rep-bad'">{{ user.videoVerified ? '✅ Верифицирован' : '❌ Не верифицирован' }}</b>
+              <div v-if="user.videoUrl" style="margin-top: 6px;">
+                <a :href="user.videoUrl" target="_blank" style="color: #6366f1; text-decoration: none; font-weight: bold; font-size: 0.85rem;">🎥 Смотреть видео</a>
+              </div>
+            </div>
+          </div>
           <div class="detail-row"><span>Забанен до</span><b>{{ user.bannedUntil ? formatDate(user.bannedUntil) : 'Не забанен' }}</b></div>
           <div class="detail-row"><span>Регистрация</span><b>{{ formatDate(user.createdAt) }}</b></div>
           <div class="detail-row"><span>Интересы</span>
@@ -32,6 +41,21 @@
         <!-- Действия -->
         <div class="admin-card">
           <h3>Действия</h3>
+          <div class="action-group">
+            <button
+              v-if="!user.videoVerified && user.videoUrl"
+              class="admin-btn-outline"
+              @click="doVerify"
+            >✅ Верифицировать видео</button>
+            <button
+              v-if="!user.videoVerified && user.videoUrl"
+              class="admin-btn-danger"
+              @click="doRejectVideo"
+              style="margin-top: 8px; margin-left: 8px;"
+            >❌ Отклонить видео</button>
+            <div v-if="user.videoVerified" class="admin-verified-badge">✅ Видео верифицировано</div>
+          </div>
+          <hr class="divider" />
           <div class="action-group">
             <label class="field-label">Бан (дней)</label>
             <div class="ban-row">
@@ -109,17 +133,37 @@ const allLobbies = computed(() => {
 async function load() {
   const token = localStorage.getItem('adminToken');
   const res = await fetch(`${API_URL}/admin/users/${route.params.id}`, {
-    headers: { 'X-Admin-Token': token ?? '' },
+    headers: { Authorization: `Bearer ${token || ''}` },
   });
   user.value = await res.json();
   loading.value = false;
+}
+
+async function doVerify() {
+  if (!confirm('Подтвердить верификацию? Видео будет удалено с диска.')) return;
+  const token = localStorage.getItem('adminToken');
+  await fetch(`${API_URL}/admin/users/${route.params.id}/verify`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token || ''}` },
+  });
+  await load();
+}
+
+async function doRejectVideo() {
+  if (!confirm('Отклонить видео? Файл будет удален.')) return;
+  const token = localStorage.getItem('adminToken');
+  await fetch(`${API_URL}/admin/users/${route.params.id}/reject-video`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token || ''}` },
+  });
+  await load();
 }
 
 async function doBan() {
   const token = localStorage.getItem('adminToken');
   await fetch(`${API_URL}/admin/users/${route.params.id}/ban`, {
     method: 'PATCH',
-    headers: { 'X-Admin-Token': token ?? '', 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${token || ''}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ days: banDays.value }),
   });
   await load();
@@ -129,7 +173,7 @@ async function doUnban() {
   const token = localStorage.getItem('adminToken');
   await fetch(`${API_URL}/admin/users/${route.params.id}/ban`, {
     method: 'PATCH',
-    headers: { 'X-Admin-Token': token ?? '', 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${token || ''}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ days: 0 }),
   });
   await load();
@@ -140,7 +184,7 @@ async function doDelete() {
   const token = localStorage.getItem('adminToken');
   await fetch(`${API_URL}/admin/users/${route.params.id}`, {
     method: 'DELETE',
-    headers: { 'X-Admin-Token': token ?? '' },
+    headers: { Authorization: `Bearer ${token || ''}` },
   });
   router.push('/admin/users');
 }
@@ -188,4 +232,5 @@ onMounted(load);
 }
 .admin-btn-outline:hover { background: rgba(99,102,241,0.1); }
 .divider { border: none; border-top: 1px solid #2a2d3a; margin: 8px 0; }
+.admin-verified-badge { color: #4ade80; font-size: 0.875rem; font-weight: 600; padding: 8px 0; }
 </style>
