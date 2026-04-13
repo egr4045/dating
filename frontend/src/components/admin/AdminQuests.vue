@@ -62,7 +62,7 @@
             <td class="id-cell">{{ q.id }}</td>
             <td>
               <div class="quest-title">{{ q.title }}</div>
-              <div class="quest-desc">{{ q.description.slice(0, 60) }}{{ q.description.length > 60 ? '…' : '' }}</div>
+              <div class="quest-desc">{{ (q.description || '').slice(0, 60) }}{{ (q.description || '').length > 60 ? '…' : '' }}</div>
             </td>
             <td>
               <span class="cat-badge" :class="'cat-' + q.category">{{ catLabel(q.category) }}</span>

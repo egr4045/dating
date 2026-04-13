@@ -54,7 +54,7 @@
           <div style="font-size:3rem">🎉</div>
           <h3>Пока событий нет</h3>
           <p>Попробуй изменить фильтры или загляни чуть позже</p>
-          <button class="btn btn-outline btn-sm" @click="loadQuests">Обновить</button>
+          <button class="btn btn-outline btn-sm" @click="loadQuests()">Обновить</button>
         </div>
 
         <div v-else class="cards-stack">
@@ -183,8 +183,10 @@ import QuestCard from './QuestCard.vue';
 import DualRangeSlider from './DualRangeSlider.vue';
 import QuestMap from './QuestMap.vue';
 import { useToast } from '../composables/useToast';
+import { useImagePreloader } from '../composables/useImagePreloader';
 
 const { error: toastError } = useToast();
+const { getCachedFeed, invalidateCache, startPreload } = useImagePreloader();
 
 const router = useRouter();
 const quests = ref<any[]>([]);
@@ -244,13 +246,25 @@ const categoryOptions = [
 
 let socket: Socket | null = null;
 
-async function loadQuests() {
-  loading.value = true;
+async function loadQuests(fromCache = false) {
   const token = localStorage.getItem('token');
   if (!token) { router.push('/'); return; }
 
+  // ── Cache-first: мгновенный рендер из кэша ───────────────────────────────
+  if (fromCache) {
+    const cached = getCachedFeed(token);
+    if (cached && cached.length > 0) {
+      quests.value = cached;
+      loading.value = false;
+      // Тихо обновляем в фоне, чтобы не было видимого перескока
+      _fetchFeedInBackground(token);
+      return;
+    }
+  }
+
+  // ── Обычная загрузка (или кэш протух) ────────────────────────────────────
+  loading.value = true;
   try {
-    // Параллельно грузим квесты и профиль для получения актуального стрика
     const [questsRes, profileRes] = await Promise.all([
       fetch(`${API_URL}/quests/feed?${new URLSearchParams({
         prefGender: filters.value.prefGender,
@@ -279,11 +293,48 @@ async function loadQuests() {
     const data = await questsRes.json();
     quests.value = data;
     track('feed_load', { count: data.length });
+    // Обновляем кэш свежими данными
+    startPreload(token);
   } catch {
     quests.value = [];
   } finally {
     loading.value = false;
   }
+}
+
+/** Фоновое обновление фида без спиннера — пользователь не замечает */
+async function _fetchFeedInBackground(token: string) {
+  try {
+    const [questsRes, profileRes] = await Promise.all([
+      fetch(`${API_URL}/quests/feed?${new URLSearchParams({
+        prefGender: filters.value.prefGender,
+        ageMin: String(filters.value.ageMin),
+        ageMax: String(filters.value.ageMax),
+        ...(filters.value.category !== 'all' ? { category: filters.value.category } : {}),
+        ...(filters.value.todayOnly ? { todayOnly: 'true' } : {}),
+      })}`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_URL}/users/me`, { headers: { Authorization: `Bearer ${token}` } })
+    ]);
+
+    if (profileRes.ok) currentUser.value = await profileRes.json();
+
+    if (questsRes.status === 403) {
+      await questsRes.json();
+      isBanned.value = true;
+      quests.value = [];
+      return;
+    }
+    if (!questsRes.ok) return;
+
+    const data = await questsRes.json();
+    // Обновляем только если у юзера ещё полный стек (не успел свайпнуть)
+    if (quests.value.length >= data.length) {
+      quests.value = data;
+    }
+    // Обновляем кэш
+    startPreload(token);
+    track('feed_load', { count: data.length, source: 'background' });
+  } catch { /* silent */ }
 }
 
 async function onLike(questId: string) {
@@ -292,6 +343,8 @@ async function onLike(questId: string) {
 
   const token = localStorage.getItem('token');
   if (!token) return;
+
+  invalidateCache(); // после свайпа кэш протухает — следующий вход получит свежий фид
 
   // Убираем карточку из стека с задержкой, чтобы анимация улёта успела доиграть
   setTimeout(() => {
@@ -355,6 +408,7 @@ function logout() {
 }
 
 function doLogout() {
+  invalidateCache();
   localStorage.removeItem('token');
   localStorage.removeItem('userId');
   router.push('/');
@@ -371,7 +425,7 @@ function connectSocket() {
 }
 
 onMounted(() => {
-  loadQuests();
+  loadQuests(true); // cache-first: если есть кэш — рендер мгновенный
   connectSocket();
 });
 

@@ -31,8 +31,7 @@ describe('urlBase64ToUint8Array', () => {
     // base64url: "+" = "-", "/" = "_"
     // ">" в ASCII = 0x3E, в base64 = "Pg=="
     // В URL-safe: "Pg==" без padding = "Pg"... тест через значение
-    const urlSafe = 'Pj4-'; // URL-safe base64
-    const regular = 'Pj4+'; // обычный base64 (тот же контент)
+    const urlSafe = 'Pj4-'; // URL-safe base64 (эквивалент 'Pj4+' в обычном base64)
     const result = urlBase64ToUint8Array(urlSafe);
     expect(result.length).toBeGreaterThan(0);
   });

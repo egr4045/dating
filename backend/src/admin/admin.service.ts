@@ -252,18 +252,26 @@ export class AdminService {
     title?: string; description?: string;
     category?: string; subcategory?: string;
     imageUrl?: string; address?: string; price?: string; paymentRule?: string;
+    lat?: number | null; lon?: number | null;
+    sponsored?: boolean; sponsorName?: string; sponsorLogo?: string; sponsorBudget?: number;
   }) {
     return this.prisma.questTemplate.update({
       where: { id },
       data: {
-        ...(data.title       !== undefined && { title:       data.title.trim()       }),
-        ...(data.description !== undefined && { description: data.description.trim() }),
-        ...(data.category    !== undefined && { category:    data.category           }),
-        ...(data.subcategory !== undefined && { subcategory: data.subcategory.trim() }),
-        ...(data.imageUrl    !== undefined && { imageUrl:    data.imageUrl || null   }),
-        ...(data.address     !== undefined && { address:     data.address  || null   }),
-        ...(data.price       !== undefined && { price:       data.price    || null   }),
-        ...(data.paymentRule !== undefined && { paymentRule: data.paymentRule        }),
+        ...(data.title        !== undefined && { title:        data.title.trim()        }),
+        ...(data.description  !== undefined && { description:  data.description.trim()  }),
+        ...(data.category     !== undefined && { category:     data.category            }),
+        ...(data.subcategory  !== undefined && { subcategory:  data.subcategory.trim()  }),
+        ...(data.imageUrl     !== undefined && { imageUrl:     data.imageUrl  || null   }),
+        ...(data.address      !== undefined && { address:      data.address   || null   }),
+        ...(data.price        !== undefined && { price:        data.price     || null   }),
+        ...(data.paymentRule  !== undefined && { paymentRule:  data.paymentRule          }),
+        ...(data.lat          !== undefined && { lat:          data.lat                  }),
+        ...(data.lon          !== undefined && { lon:          data.lon                  }),
+        ...(data.sponsored    !== undefined && { sponsored:    data.sponsored             }),
+        ...(data.sponsorName  !== undefined && { sponsorName:  data.sponsorName  || null }),
+        ...(data.sponsorLogo  !== undefined && { sponsorLogo:  data.sponsorLogo  || null }),
+        ...(data.sponsorBudget !== undefined && { sponsorBudget: data.sponsorBudget      }),
       },
     });
   }

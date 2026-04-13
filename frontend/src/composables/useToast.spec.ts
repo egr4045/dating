@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Каждый тест работает со свежим модулем — важно для сброса nextId и toasts
 async function freshUseToast() {

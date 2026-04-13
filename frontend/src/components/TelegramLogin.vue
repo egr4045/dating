@@ -54,27 +54,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { API_URL } from '../config';
 import { track } from '../analytics';
+import { useImagePreloader } from '../composables/useImagePreloader';
 
-async function preloadQuestImages(token: string) {
-  try {
-    const res = await fetch(`${API_URL}/quests/feed`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return;
-    const quests: any[] = await res.json();
-    const loads = quests
-      .filter(q => q.imageUrl)
-      .map(q => new Promise<void>(resolve => {
-        const img = new Image();
-        img.onload = img.onerror = () => resolve();
-        img.src = q.imageUrl;
-      }));
-    await Promise.race([
-      Promise.allSettled(loads),
-      new Promise(r => setTimeout(r, 3000)),
-    ]);
-  } catch { /* non-blocking */ }
-}
+const { startPreload } = useImagePreloader();
 
 const router = useRouter();
 const loginToken = ref('');
@@ -120,7 +102,7 @@ function startPolling() {
           } catch { /* ignore error during auto-apply */ }
         }
 
-        preloadQuestImages(data.jwt);
+        startPreload(data.jwt); // fire-and-forget: грузим фид + картинки пока юзер онбордится
         router.push('/onboarding');
       } else if (data.status === 'expired') {
         clearInterval(pollInterval!);
@@ -142,7 +124,7 @@ async function handleTestLogin() {
     localStorage.setItem('token', data.token);
     localStorage.setItem('userId', String(data.user.id));
     track('test_login', { name: testName.value });
-    preloadQuestImages(data.token);
+    startPreload(data.token); // fire-and-forget
     router.push(!data.user.interests?.length ? '/onboarding' : '/dashboard');
   } catch { /* ignore */ }
 }
