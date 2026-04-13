@@ -119,6 +119,9 @@ model QuestTemplate {
   lat          Float?
   lon          Float?
 
+  // Город проведения (null = любой город)
+  city         String?
+
   // Партнёрские квесты
   sponsored    Boolean  @default(false)
   sponsorName  String?

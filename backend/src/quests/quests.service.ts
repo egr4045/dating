@@ -14,6 +14,24 @@ export class QuestsService {
     private pushService: PushService
   ) {}
 
+  async getAvailableSubcategories(city: string | null): Promise<string[]> {
+    const where: any = {};
+    if (city && city !== 'other') {
+      // Показываем subcategory если есть квест в нужном городе ИЛИ без привязки к городу (city=null)
+      where.OR = [
+        { city: city },
+        { city: null },
+      ];
+    }
+    // Если city = null или 'other' — нет ограничений, показываем всё
+    const templates = await this.prisma.questTemplate.findMany({
+      where,
+      select: { subcategory: true },
+      distinct: ['subcategory'],
+    });
+    return templates.map(t => t.subcategory);
+  }
+
   async getAvailableQuests(userId: number, filters?: any) {
     // Проверка бана
     const currentUser = await this.prisma.user.findUnique({

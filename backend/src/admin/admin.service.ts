@@ -234,6 +234,7 @@ export class AdminService {
     id: string; title: string; description: string;
     category: string; subcategory: string;
     imageUrl?: string; address?: string; price?: string; paymentRule?: string;
+    city?: string;
   }) {
     return this.prisma.questTemplate.create({ data: {
       id:          data.id.trim(),
@@ -245,6 +246,7 @@ export class AdminService {
       address:     data.address    || null,
       price:       data.price      || null,
       paymentRule: data.paymentRule || '50/50',
+      city:        data.city       || null,
     }});
   }
 
@@ -254,6 +256,7 @@ export class AdminService {
     imageUrl?: string; address?: string; price?: string; paymentRule?: string;
     lat?: number | null; lon?: number | null;
     sponsored?: boolean; sponsorName?: string; sponsorLogo?: string; sponsorBudget?: number;
+    city?: string | null;
   }) {
     return this.prisma.questTemplate.update({
       where: { id },
@@ -272,6 +275,7 @@ export class AdminService {
         ...(data.sponsorName  !== undefined && { sponsorName:  data.sponsorName  || null }),
         ...(data.sponsorLogo  !== undefined && { sponsorLogo:  data.sponsorLogo  || null }),
         ...(data.sponsorBudget !== undefined && { sponsorBudget: data.sponsorBudget      }),
+        ...(data.city         !== undefined && { city:          data.city        || null }),
       },
     });
   }

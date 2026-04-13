@@ -46,6 +46,7 @@
             <th class="sortable-th" @click="sortBy('title')">Название {{ sortIcon('title') }}</th>
             <th class="sortable-th" @click="sortBy('category')">Категория {{ sortIcon('category') }}</th>
             <th>Подкатегория</th>
+            <th>Город</th>
             <th>Цена</th>
             <th class="sortable-th" @click="sortBy('lobbies')">Лобби {{ sortIcon('lobbies') }}</th>
             <th style="text-align:right">Действия</th>
@@ -53,10 +54,10 @@
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="7" class="loading-cell">Загрузка...</td>
+            <td colspan="8" class="loading-cell">Загрузка...</td>
           </tr>
           <tr v-else-if="quests.length === 0">
-            <td colspan="7" class="empty-cell">Карточки не найдены</td>
+            <td colspan="8" class="empty-cell">Карточки не найдены</td>
           </tr>
           <tr v-for="q in quests" :key="q.id" class="quest-row">
             <td class="id-cell">{{ q.id }}</td>
@@ -68,6 +69,7 @@
               <span class="cat-badge" :class="'cat-' + q.category">{{ catLabel(q.category) }}</span>
             </td>
             <td class="text-muted">{{ q.subcategory }}</td>
+            <td class="text-muted">{{ q.city || '—' }}</td>
             <td class="text-muted">{{ q.price || '—' }}</td>
             <td>
               <span class="lobby-count" :class="{ 'has-lobbies': q._count?.lobbies > 0 }">
@@ -166,6 +168,16 @@
               <div class="field field--full">
                 <label class="field-label">Адрес / место</label>
                 <input v-model="form.address" class="admin-input" placeholder="ул. Ленина, 10 или онлайн" />
+              </div>
+
+              <!-- Город -->
+              <div class="field">
+                <label class="field-label">Город события</label>
+                <select v-model="form.city" class="admin-input admin-select">
+                  <option :value="null">🌍 Любой город</option>
+                  <option value="Санкт-Петербург">🏙️ Санкт-Петербург</option>
+                </select>
+                <div class="field-hint">Влияет на фильтрацию интересов в онбординге</div>
               </div>
 
               <!-- URL картинки -->
@@ -323,6 +335,7 @@ const emptyForm = () => ({
   category: 'offline', subcategory: '',
   price: '', paymentRule: '50/50',
   address: '', imageUrl: '',
+  city: null as string | null,
 });
 const form = ref(emptyForm());
 let editId = '';
@@ -346,6 +359,7 @@ function openEdit(q: any) {
     paymentRule: q.paymentRule ?? '50/50',
     address:     q.address ?? '',
     imageUrl:    q.imageUrl ?? '',
+    city:        q.city ?? null,
   };
   editId = q.id;
   editMode.value = true;

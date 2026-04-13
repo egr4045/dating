@@ -30,6 +30,12 @@ export class QuestsController {
     return this.questsService.getMapQuests(req.user.id, category);
   }
 
+  @Get('subcategories')
+  @UseGuards(JwtAuthGuard)
+  getSubcategories(@Query('city') city?: string) {
+    return this.questsService.getAvailableSubcategories(city || null);
+  }
+
   @Get('feed')
   @UseGuards(JwtAuthGuard)
   getFeed(

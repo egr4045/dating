@@ -30,6 +30,9 @@
       <button class="btn btn-primary btn-full" :disabled="!photoPreview" @click="step++">
         Продолжить →
       </button>
+      <div v-if="!photoPreview" class="validation-hint">
+        📷 Загрузи фото, чтобы продолжить
+      </div>
       <button class="btn btn-ghost btn-full" @click="step++">Пропустить</button>
     </div>
 
@@ -67,12 +70,25 @@
 
       <div class="field-group">
         <label class="input-label">Город</label>
-        <input class="input" v-model="form.city" placeholder="Москва, Санкт-Петербург..." maxlength="50" />
+        <div class="city-btns">
+          <button
+            v-for="c in cityOptions"
+            :key="c.value"
+            class="gender-btn"
+            :class="{ active: form.city === c.value }"
+            @click="form.city = c.value"
+          >{{ c.emoji }} {{ c.label }}</button>
+        </div>
       </div>
 
-      <button class="btn btn-primary btn-full" :disabled="!form.firstName || !form.gender" @click="step++">
+      <button class="btn btn-primary btn-full" :disabled="!form.firstName || !form.gender || !form.city" @click="step++">
         Продолжить →
       </button>
+      <div v-if="!form.firstName || !form.gender || !form.city" class="validation-hint">
+        <span v-if="!form.firstName">✏️ Укажи имя</span>
+        <span v-else-if="!form.gender">👤 Выбери пол</span>
+        <span v-else-if="!form.city">📍 Выбери город</span>
+      </div>
     </div>
 
     <!-- ШАГ 2: О себе -->
@@ -118,6 +134,9 @@
       >
         Продолжить → ({{ selectedInterests.length }} выбрано)
       </button>
+      <div v-if="selectedInterests.length < 2" class="validation-hint">
+        ✨ Выбери ещё {{ 2 - selectedInterests.length }} {{ selectedInterests.length === 1 ? 'интерес' : 'интереса' }}
+      </div>
     </div>
 
     <!-- ШАГ 4: Фильтры партнёра -->
@@ -151,6 +170,9 @@
       <button class="btn btn-primary btn-full" :disabled="!form.prefGender" @click="step++">
         Продолжить →
       </button>
+      <div v-if="!form.prefGender" class="validation-hint">
+        💫 Выбери предпочитаемый пол партнёра
+      </div>
     </div>
 
     <!-- ШАГ 5: Правила -->
@@ -202,7 +224,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { API_URL } from '../config';
 import { track } from '../analytics';
@@ -257,8 +279,20 @@ function restoreDraft() {
 
 watch([step, form, selectedInterests], saveDraft, { deep: true });
 
-watch(step, (newStep) => {
+watch(step, async (newStep) => {
   track('onboarding_step', { step: newStep });
+
+  // Загружаем доступные оффлайн-подкатегории при переходе на шаг интересов
+  if (newStep === 3 && form.value.city) {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(
+        `${API_URL}/quests/subcategories?city=${encodeURIComponent(form.value.city)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.ok) availableOfflineSubcategories.value = await res.json();
+    } catch { /* игнорируем, показываем все категории */ }
+  }
 });
 
 onMounted(() => {
@@ -288,38 +322,52 @@ function onPhotoSelected(e: Event) {
   reader.readAsDataURL(file);
 }
 
-const interestGroups = [
-  {
-    key: 'offline', emoji: '🌍', label: 'Активности',
-    items: [
-      { id: 'hookah', emoji: '💨', label: 'Кальян' },
-      { id: 'bar', emoji: '🍺', label: 'Бар' },
-      { id: 'sport', emoji: '⚽', label: 'Спорт' },
-      { id: 'movie_theatre', emoji: '🎬', label: 'Кино' },
-      { id: 'picnic', emoji: '🧺', label: 'Пикник' },
-      { id: 'bowling', emoji: '🎳', label: 'Боулинг' },
-    ]
-  },
-  {
-    key: 'games', emoji: '🎮', label: 'Игры',
-    items: [
-      { id: 'dota', emoji: '⚔️', label: 'Dota 2' },
-      { id: 'cs', emoji: '🔫', label: 'CS2' },
-      { id: 'mc', emoji: '⛏️', label: 'Minecraft' },
-      { id: 'wow', emoji: '🐉', label: 'WoW' },
-      { id: 'itt', emoji: '🃏', label: 'Настолки' },
-      { id: 'split', emoji: '🎭', label: 'Splitgate' },
-    ]
-  },
-  {
-    key: 'online', emoji: '📱', label: 'Онлайн',
-    items: [
-      { id: 'movie_online', emoji: '🍿', label: 'Смотреть кино' },
-      { id: 'series', emoji: '📺', label: 'Сериалы' },
-      { id: 'chatting', emoji: '💬', label: 'Поболтать' },
-    ]
-  },
+const cityOptions = [
+  { value: 'Санкт-Петербург', emoji: '🏙️', label: 'Санкт-Петербург' },
+  { value: 'other',           emoji: '🌍', label: 'Не Санкт-Петербург' },
 ];
+
+// Доступные подкатегории оффлайн-событий в выбранном городе (загружаем при переходе на шаг 3)
+const availableOfflineSubcategories = ref<string[]>([]);
+
+const ALL_OFFLINE_ITEMS = [
+  { id: 'hookah',        emoji: '💨', label: 'Кальян' },
+  { id: 'bar',           emoji: '🍺', label: 'Бар' },
+  { id: 'sport',         emoji: '⚽', label: 'Спорт' },
+  { id: 'movie_theatre', emoji: '🎬', label: 'Кино' },
+  { id: 'picnic',        emoji: '🧺', label: 'Пикник' },
+  { id: 'bowling',       emoji: '🎳', label: 'Боулинг' },
+];
+
+const interestGroups = computed(() => {
+  // Если получили список с сервера — фильтруем оффлайн-категории, иначе показываем все
+  const filteredOffline = availableOfflineSubcategories.value.length > 0
+    ? ALL_OFFLINE_ITEMS.filter(item => availableOfflineSubcategories.value.includes(item.id))
+    : ALL_OFFLINE_ITEMS;
+
+  return [
+    { key: 'offline', emoji: '🌍', label: 'Активности', items: filteredOffline },
+    {
+      key: 'games', emoji: '🎮', label: 'Игры',
+      items: [
+        { id: 'dota',  emoji: '⚔️', label: 'Dota 2' },
+        { id: 'cs',    emoji: '🔫', label: 'CS2' },
+        { id: 'mc',    emoji: '⛏️', label: 'Minecraft' },
+        { id: 'wow',   emoji: '🐉', label: 'WoW' },
+        { id: 'itt',   emoji: '🃏', label: 'Настолки' },
+        { id: 'split', emoji: '🎭', label: 'Splitgate' },
+      ]
+    },
+    {
+      key: 'online', emoji: '📱', label: 'Онлайн',
+      items: [
+        { id: 'movie_online', emoji: '🍿', label: 'Смотреть кино' },
+        { id: 'series',       emoji: '📺', label: 'Сериалы' },
+        { id: 'chatting',     emoji: '💬', label: 'Поболтать' },
+      ]
+    },
+  ];
+});
 
 function toggleInterest(id: string) {
   const idx = selectedInterests.value.indexOf(id);
@@ -479,6 +527,7 @@ async function finish() {
 .age-range-row { display: flex; flex-direction: column; gap: 12px; }
 .age-range-item { display: flex; flex-direction: column; gap: 4px; }
 
+.city-btns { display: flex; gap: 10px; }
 .gender-btns { display: flex; gap: 10px; }
 .gender-btn {
   flex: 1;
@@ -518,4 +567,22 @@ async function finish() {
 .rule-emoji { font-size: 1.5rem; flex-shrink: 0; }
 .rule-title { font-weight: 700; margin-bottom: 2px; }
 .payment-rule { display: flex; flex-direction: column; }
+
+.validation-hint {
+  text-align: center;
+  color: var(--primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  opacity: 0.85;
+  margin-top: -8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 0.85; transform: translateY(0); }
+}
 </style>
