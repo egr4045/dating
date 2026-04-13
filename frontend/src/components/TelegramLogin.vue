@@ -55,6 +55,27 @@ import { useRouter } from 'vue-router';
 import { API_URL } from '../config';
 import { track } from '../analytics';
 
+async function preloadQuestImages(token: string) {
+  try {
+    const res = await fetch(`${API_URL}/quests/feed`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return;
+    const quests: any[] = await res.json();
+    const loads = quests
+      .filter(q => q.imageUrl)
+      .map(q => new Promise<void>(resolve => {
+        const img = new Image();
+        img.onload = img.onerror = () => resolve();
+        img.src = q.imageUrl;
+      }));
+    await Promise.race([
+      Promise.allSettled(loads),
+      new Promise(r => setTimeout(r, 3000)),
+    ]);
+  } catch { /* non-blocking */ }
+}
+
 const router = useRouter();
 const loginToken = ref('');
 const status = ref('pending');
@@ -85,6 +106,21 @@ function startPolling() {
         localStorage.setItem('token', data.jwt);
         localStorage.setItem('userId', String(data.user.id));
         track('login_success');
+        
+        // Автоматическое применение реферального кода
+        const pendingRef = localStorage.getItem('pendingRefCode');
+        if (pendingRef) {
+          try {
+            await fetch(`${API_URL}/users/apply-referral`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.jwt}` },
+              body: JSON.stringify({ code: pendingRef }),
+            });
+            localStorage.removeItem('pendingRefCode');
+          } catch { /* ignore error during auto-apply */ }
+        }
+
+        preloadQuestImages(data.jwt);
         router.push('/onboarding');
       } else if (data.status === 'expired') {
         clearInterval(pollInterval!);
@@ -106,6 +142,7 @@ async function handleTestLogin() {
     localStorage.setItem('token', data.token);
     localStorage.setItem('userId', String(data.user.id));
     track('test_login', { name: testName.value });
+    preloadQuestImages(data.token);
     router.push(!data.user.interests?.length ? '/onboarding' : '/dashboard');
   } catch { /* ignore */ }
 }

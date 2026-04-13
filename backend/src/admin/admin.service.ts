@@ -83,6 +83,16 @@ export class AdminService {
     return { users, total, page, limit };
   }
 
+  async getUser(id: number) {
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: { 
+        photos: true, timeSlots: true, reportsReceived: true, blocksReceived: true,
+        achievements: true
+      }
+    });
+  }
+
   async getUserDetail(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -120,7 +130,7 @@ export class AdminService {
         const fs = require('fs');
         const path = require('path');
         const filename = user.videoUrl.split('/').pop();
-        if (filename) fs.unlinkSync(path.join(__dirname, '..', '..', 'uploads', 'videos', filename));
+        if (filename) fs.unlinkSync(path.join(process.cwd(), 'uploads', 'videos', filename));
       } catch (e) {
         console.warn('Не удалось удалить файл видео', e);
       }
@@ -138,7 +148,7 @@ export class AdminService {
         const fs = require('fs');
         const path = require('path');
         const filename = user.videoUrl.split('/').pop();
-        if (filename) fs.unlinkSync(path.join(__dirname, '..', '..', 'uploads', 'videos', filename));
+        if (filename) fs.unlinkSync(path.join(process.cwd(), 'uploads', 'videos', filename));
       } catch (e) {
         console.warn('Не удалось удалить файл видео', e);
       }
@@ -150,14 +160,29 @@ export class AdminService {
   }
 
   async banUser(userId: number, days: number) {
-    const banUntil = days > 0
-      ? new Date(Date.now() + days * 24 * 60 * 60 * 1000)
-      : null;
-
+    const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
     return this.prisma.user.update({
       where: { id: userId },
-      data: { bannedUntil: banUntil },
+      data: { bannedUntil: until }
     });
+  }
+
+  async grantAchievement(userId: number, badgeId: string) {
+    try {
+      await this.prisma.userAchievement.create({
+        data: { userId, badgeId }
+      });
+      return { success: true };
+    } catch(e) {
+      return { success: false, message: 'Бейдж уже выдан' };
+    }
+  }
+
+  async removeAchievement(userId: number, badgeId: string) {
+    await this.prisma.userAchievement.deleteMany({
+      where: { userId, badgeId }
+    });
+    return { success: true };
   }
 
   async deleteUser(userId: number) {
@@ -177,7 +202,7 @@ export class AdminService {
 
   // ── Карточки (QuestTemplate) ───────────────────────────────────────────────
 
-  async getQuests(search?: string, category?: string, page = 1, limit = 50) {
+  async getQuests(search?: string, category?: string, page = 1, limit = 50, sort = 'id', dir: 'asc' | 'desc' = 'desc') {
     const where: any = {};
     if (search) {
       where.OR = [
@@ -187,10 +212,14 @@ export class AdminService {
     }
     if (category && category !== 'all') where.category = category;
 
+    const allowedSortFields = ['id', 'title', 'category', 'subcategory', 'createdAt'];
+    const sortField = allowedSortFields.includes(sort) ? sort : 'id';
+    const sortDir = dir === 'asc' ? 'asc' : 'desc';
+
     const [quests, total] = await Promise.all([
       this.prisma.questTemplate.findMany({
         where,
-        orderBy: { title: 'asc' },
+        orderBy: { [sortField]: sortDir },
         skip: (page - 1) * limit,
         take: limit,
         include: { _count: { select: { lobbies: true } } },
@@ -248,6 +277,33 @@ export class AdminService {
       throw new Error(`Нельзя удалить: есть ${activeLobbies} активных лобби`);
     }
     return this.prisma.questTemplate.delete({ where: { id } });
+  }
+
+  // ── Глобальные настройки (AppConfig) ───────────────────────────────────────
+
+  async getConfig() {
+    const list = await this.prisma.appConfig.findMany();
+    const config: Record<string, string> = {
+      repCompletedBonus: '0.5',
+      repFailedPenalty: '1.0',
+      repBanThreshold: '2.0',
+      repBanDays: '30'
+    };
+    for (const item of list) {
+      config[item.key] = item.value;
+    }
+    return config;
+  }
+
+  async updateConfig(newConfig: Record<string, string>) {
+    for (const [key, value] of Object.entries(newConfig)) {
+      await this.prisma.appConfig.upsert({
+        where: { key },
+        update: { value: String(value) },
+        create: { key, value: String(value) }
+      });
+    }
+    return { success: true };
   }
 
   // ── Матчи ──────────────────────────────────────────────────────────────────

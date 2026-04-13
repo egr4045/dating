@@ -9,6 +9,7 @@ import { ChatModule } from './chat/chat.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PrismaService } from './prisma/prisma.service';
 import { AdminModule } from './admin/admin.module';
+import { PushModule } from './push/push.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AdminModule } from './admin/admin.module';
     ChatModule,
     NotificationsModule,
     AdminModule,
+    PushModule,
   ],
   providers: [
     PrismaService,

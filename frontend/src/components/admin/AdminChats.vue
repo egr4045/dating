@@ -52,6 +52,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { API_URL } from '../../config';
+import { adminFetch } from '../../utils/adminFetch';
 
 const chats = ref<any[]>([]);
 const total = ref(0);
@@ -63,13 +64,10 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit)));
 
 async function loadChats() {
   loading.value = true;
-  const token = localStorage.getItem('adminToken');
   const params = new URLSearchParams({ page: String(page.value), limit: String(limit) });
 
   try {
-    const res = await fetch(`${API_URL}/admin/chats?${params}`, {
-      headers: { Authorization: `Bearer ${token || ''}` },
-    });
+    const res = await adminFetch(`${API_URL}/admin/chats?${params}`);
     const data = await res.json();
     chats.value = data.chats;
     total.value = data.total;

@@ -10,7 +10,12 @@
       "Bash(PRISMA_MIGRATE_SKIP_GENERATE=true npx prisma db push)",
       "Bash(npx tsc:*)",
       "Read(//mnt/d/**)",
-      "Read(//d/dev//**)"
+      "Read(//d/dev//**)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(npm test:*)",
+      "Bash(node -e \"require\\('telegraf'\\)\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('jest',{}\\), indent=2\\)\\)\")"
     ]
   }
 }

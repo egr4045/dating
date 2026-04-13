@@ -69,6 +69,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { API_URL } from '../../config';
+import { adminFetch } from '../../utils/adminFetch';
 
 const matches = ref<any[]>([]);
 const total = ref(0);
@@ -81,12 +82,13 @@ const limit = 30;
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit)));
 
 const statusTabs = [
-  { value: '', label: 'Все' },
-  { value: 'MATCHED', label: 'В процессе' },
-  { value: 'WAITING', label: 'Ожидание' },
+  { value: '',          label: 'Все' },
+  { value: 'MATCHED',   label: 'Активные' },
+  { value: 'WAITING',   label: 'Ожидание' },
   { value: 'COMPLETED', label: 'Завершённые' },
-  { value: 'FAILED', label: 'Отменённые' },
-  { value: 'EXPIRED', label: 'Просрочены' },
+  { value: 'CANCELLED', label: 'Отменённые' },
+  { value: 'FAILED',    label: 'Сорвались' },
+  { value: 'EXPIRED',   label: 'Просрочены' },
 ];
 
 function setStatus(val: string) {
@@ -103,15 +105,12 @@ function debouncedLoad() {
 
 async function loadMatches() {
   loading.value = true;
-  const token = localStorage.getItem('adminToken');
   const params = new URLSearchParams({ page: String(page.value), limit: String(limit) });
   if (statusFilter.value) params.set('status', statusFilter.value);
   if (search.value) params.set('search', search.value);
 
   try {
-    const res = await fetch(`${API_URL}/admin/matches?${params}`, {
-      headers: { Authorization: `Bearer ${token || ''}` },
-    });
+    const res = await adminFetch(`${API_URL}/admin/matches?${params}`);
     const data = await res.json();
     matches.value = data.matches;
     total.value = data.total;
@@ -125,12 +124,12 @@ function nextPage() { page.value++; loadMatches(); }
 
 function statusClass(s: string) {
   const m: Record<string, string> = {
-    MATCHED: 'status-badge status-active',
+    MATCHED:   'status-badge status-active',
     COMPLETED: 'status-badge status-active',
-    WAITING: 'status-badge status-waiting',
-    EXPIRED: 'status-badge status-banned',
-    CANCELLED: 'status-badge status-banned',
-    FAILED: 'status-badge status-banned',
+    WAITING:   'status-badge status-waiting',
+    CANCELLED: 'status-badge status-cancelled',
+    FAILED:    'status-badge status-banned',
+    EXPIRED:   'status-badge status-banned',
   };
   return m[s] ?? 'status-badge';
 }

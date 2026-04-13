@@ -64,6 +64,19 @@ export class AdminController {
     return this.adminService.deleteUser(id);
   }
 
+  @Post('users/:id/achievements')
+  @UseGuards(AdminAuthGuard)
+  async grantAchievement(@Param('id', ParseIntPipe) id: number, @Body('badgeId') badgeId: string) {
+    if (!badgeId) throw new BadRequestException('badgeId required');
+    return this.adminService.grantAchievement(id, badgeId);
+  }
+
+  @Delete('users/:id/achievements/:badgeId')
+  @UseGuards(AdminAuthGuard)
+  async removeAchievement(@Param('id', ParseIntPipe) id: number, @Param('badgeId') badgeId: string) {
+    return this.adminService.removeAchievement(id, badgeId);
+  }
+
   // ── Карточки ──────────────────────────────────────────────────────────────
 
   @Get('quests')
@@ -73,8 +86,10 @@ export class AdminController {
     @Query('category') category?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('sort') sort?: string,
+    @Query('dir') dir?: string,
   ) {
-    return this.adminService.getQuests(search, category, Number(page) || 1, Number(limit) || 50);
+    return this.adminService.getQuests(search, category, Number(page) || 1, Number(limit) || 50, sort, dir as 'asc' | 'desc');
   }
 
   @Post('quests')
@@ -100,6 +115,20 @@ export class AdminController {
     } catch (e) {
       throw new BadRequestException(e.message);
     }
+  }
+
+  // ── Настройки ──────────────────────────────────────────────────────────────
+
+  @Get('config')
+  @UseGuards(AdminAuthGuard)
+  async getConfig() {
+    return this.adminService.getConfig();
+  }
+
+  @Put('config')
+  @UseGuards(AdminAuthGuard)
+  async updateConfig(@Body() config: Record<string, string>) {
+    return this.adminService.updateConfig(config);
   }
 
   // ── Матчи ──────────────────────────────────────────────────────────────────

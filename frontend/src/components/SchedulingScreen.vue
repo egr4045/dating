@@ -48,7 +48,7 @@
           <p>Выбери, когда вам удобно встретиться</p>
           <div class="field-group">
             <label class="input-label">Дата и время</label>
-            <input type="datetime-local" class="input" v-model="proposedDateInput" :min="minDatetime" />
+            <DateTimePicker v-model="proposedDateInput" :min="minDatetime" />
           </div>
           <button class="btn btn-primary btn-full" :disabled="!proposedDateInput || submitting" @click="proposeDate">
             {{ submitting ? 'Отправка...' : 'Предложить дату →' }}
@@ -92,7 +92,7 @@
             </div>
             <div v-if="showCounter" class="field-group" style="margin-top:12px">
               <label class="input-label">Другая дата</label>
-              <input type="datetime-local" class="input" v-model="counterDateInput" :min="minDatetime" />
+              <DateTimePicker v-model="counterDateInput" :min="minDatetime" />
               <button class="btn btn-primary btn-full btn-sm" :disabled="!counterDateInput || submitting" @click="confirmDate(false)">
                 Отправить встречную дату
               </button>
@@ -122,6 +122,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { io, Socket } from 'socket.io-client';
 import { API_URL } from '../config';
 import { track } from '../analytics';
+import DateTimePicker from './DateTimePicker.vue';
 
 const route = useRoute();
 const router = useRouter();

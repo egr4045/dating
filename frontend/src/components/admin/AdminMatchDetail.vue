@@ -64,16 +64,14 @@
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { API_URL } from '../../config';
+import { adminFetch } from '../../utils/adminFetch';
 
 const route = useRoute();
 const match = ref<any>(null);
 const loading = ref(true);
 
 async function load() {
-  const token = localStorage.getItem('adminToken');
-  const res = await fetch(`${API_URL}/admin/matches/${route.params.id}`, {
-    headers: { Authorization: `Bearer ${token || ''}` },
-  });
+  const res = await adminFetch(`${API_URL}/admin/matches/${route.params.id}`);
   match.value = await res.json();
   loading.value = false;
 }

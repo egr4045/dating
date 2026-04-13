@@ -50,6 +50,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { API_URL } from '../../config';
+import { adminFetch } from '../../utils/adminFetch';
 
 const users = ref<any[]>([]);
 const total = ref(0);
@@ -61,7 +62,6 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit)));
 
 async function loadUsers() {
   loading.value = true;
-  const token = localStorage.getItem('adminToken');
   const params = new URLSearchParams({
     page: String(page.value),
     limit: String(limit),
@@ -69,9 +69,7 @@ async function loadUsers() {
   });
 
   try {
-    const res = await fetch(`${API_URL}/admin/users?${params}`, {
-      headers: { Authorization: `Bearer ${token || ''}` },
-    });
+    const res = await adminFetch(`${API_URL}/admin/users?${params}`);
     const data = await res.json();
     users.value = data.users;
     total.value = data.total;

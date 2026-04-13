@@ -67,6 +67,28 @@
           <hr class="divider" />
           <button class="admin-btn-danger" @click="doDelete">🗑️ Удалить аккаунт</button>
         </div>
+
+        <!-- Достижения -->
+        <div class="admin-card" style="grid-column: 1 / -1; max-width: 600px;">
+          <h3>Достижения и Бейджи</h3>
+          <div class="badges-list" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+            <div v-for="b in user.achievements" :key="b.badgeId" class="admin-badge-chip">
+              <span style="font-size: 1.1rem; margin-right: 4px;">{{ getBadge(b.badgeId).icon }}</span>
+              {{ getBadge(b.badgeId).label }}
+              <button class="remove-badge-btn" @click="doRemoveBadge(b.badgeId)">✕</button>
+            </div>
+            <div v-if="!user.achievements?.length" style="font-size: 0.85rem; color: #6b7280;">Нет достижений</div>
+          </div>
+          <div class="action-group" style="flex-direction: row; align-items: center;">
+            <select v-model="selectedBadgeId" class="admin-input" style="flex: 1;">
+              <option value="" disabled>Выберите бейдж...</option>
+              <option v-for="(badge, id) in availableBadges" :key="id" :value="id">
+                {{ badge.icon }} {{ badge.label }}
+              </option>
+            </select>
+            <button class="admin-btn-outline" @click="doAddBadge" :disabled="!selectedBadgeId" style="color: #4ade80; border-color: #4ade80;"> Выдать бейдж </button>
+          </div>
+        </div>
       </div>
 
       <!-- Ожидания матча -->
@@ -116,6 +138,8 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { API_URL } from '../../config';
+import { adminFetch } from '../../utils/adminFetch';
+import { BADGES, getBadge } from '../../utils/badges';
 
 const route = useRoute();
 const router = useRouter();
@@ -131,49 +155,69 @@ const allLobbies = computed(() => {
 });
 
 async function load() {
-  const token = localStorage.getItem('adminToken');
-  const res = await fetch(`${API_URL}/admin/users/${route.params.id}`, {
-    headers: { Authorization: `Bearer ${token || ''}` },
-  });
+  const res = await adminFetch(`${API_URL}/admin/users/${route.params.id}`);
   user.value = await res.json();
   loading.value = false;
 }
 
+const selectedBadgeId = ref('');
+const availableBadges = computed(() => {
+  const userBadgeIds = user.value?.achievements?.map((a: any) => a.badgeId) || [];
+  const res: Record<string, any> = {};
+  for (const [id, badge] of Object.entries(BADGES)) {
+    if (!userBadgeIds.includes(id)) {
+      res[id] = badge;
+    }
+  }
+  return res;
+});
+
+async function doAddBadge() {
+  if (!selectedBadgeId.value) return;
+  const res = await adminFetch(`${API_URL}/admin/users/${route.params.id}/achievements`, {
+    method: 'POST',
+    body: JSON.stringify({ badgeId: selectedBadgeId.value })
+  });
+  const data = await res.json();
+  if (data.success) {
+    selectedBadgeId.value = '';
+    await load();
+  } else {
+    alert(data.message || 'Ошибка');
+  }
+}
+
+async function doRemoveBadge(badgeId: string) {
+  if (!confirm('Забрать достижение?')) return;
+  await adminFetch(`${API_URL}/admin/users/${route.params.id}/achievements/${badgeId}`, {
+    method: 'DELETE'
+  });
+  await load();
+}
+
 async function doVerify() {
   if (!confirm('Подтвердить верификацию? Видео будет удалено с диска.')) return;
-  const token = localStorage.getItem('adminToken');
-  await fetch(`${API_URL}/admin/users/${route.params.id}/verify`, {
-    method: 'PATCH',
-    headers: { Authorization: `Bearer ${token || ''}` },
-  });
+  await adminFetch(`${API_URL}/admin/users/${route.params.id}/verify`, { method: 'PATCH' });
   await load();
 }
 
 async function doRejectVideo() {
   if (!confirm('Отклонить видео? Файл будет удален.')) return;
-  const token = localStorage.getItem('adminToken');
-  await fetch(`${API_URL}/admin/users/${route.params.id}/reject-video`, {
-    method: 'PATCH',
-    headers: { Authorization: `Bearer ${token || ''}` },
-  });
+  await adminFetch(`${API_URL}/admin/users/${route.params.id}/reject-video`, { method: 'PATCH' });
   await load();
 }
 
 async function doBan() {
-  const token = localStorage.getItem('adminToken');
-  await fetch(`${API_URL}/admin/users/${route.params.id}/ban`, {
+  await adminFetch(`${API_URL}/admin/users/${route.params.id}/ban`, {
     method: 'PATCH',
-    headers: { Authorization: `Bearer ${token || ''}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ days: banDays.value }),
   });
   await load();
 }
 
 async function doUnban() {
-  const token = localStorage.getItem('adminToken');
-  await fetch(`${API_URL}/admin/users/${route.params.id}/ban`, {
+  await adminFetch(`${API_URL}/admin/users/${route.params.id}/ban`, {
     method: 'PATCH',
-    headers: { Authorization: `Bearer ${token || ''}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ days: 0 }),
   });
   await load();
@@ -181,11 +225,7 @@ async function doUnban() {
 
 async function doDelete() {
   if (!confirm('Удалить аккаунт и все связанные данные? Это нельзя отменить.')) return;
-  const token = localStorage.getItem('adminToken');
-  await fetch(`${API_URL}/admin/users/${route.params.id}`, {
-    method: 'DELETE',
-    headers: { Authorization: `Bearer ${token || ''}` },
-  });
+  await adminFetch(`${API_URL}/admin/users/${route.params.id}`, { method: 'DELETE' });
   router.push('/admin/users');
 }
 
@@ -231,6 +271,13 @@ onMounted(load);
   transition: background 0.15s;
 }
 .admin-btn-outline:hover { background: rgba(99,102,241,0.1); }
+.admin-btn-outline:disabled { opacity: 0.5; pointer-events: none; }
 .divider { border: none; border-top: 1px solid #2a2d3a; margin: 8px 0; }
 .admin-verified-badge { color: #4ade80; font-size: 0.875rem; font-weight: 600; padding: 8px 0; }
+.admin-badge-chip {
+  background: #1e2130; padding: 4px 10px; border-radius: 12px; font-size: 0.85rem; font-weight: 600;
+  display: flex; align-items: center; border: 1px solid #2a2d3a; color: #fff;
+}
+.remove-badge-btn { margin-left: 6px; background: none; border: none; color: #ef4444; cursor: pointer; font-size: 1rem; padding: 0 4px; font-weight: bold; }
+.remove-badge-btn:hover { color: #dc2626; }
 </style>

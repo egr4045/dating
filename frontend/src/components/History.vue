@@ -56,25 +56,68 @@
               <span v-if="item.partner" class="text-muted text-sm">с {{ item.partner.firstName }}</span>
               <span class="text-xs text-muted">{{ formatDate(item.createdAt) }}</span>
             </div>
+            <button v-if="item.status === 'COMPLETED' && !item.reviewed" 
+                    @click="openReviewDialog(item.id)"
+                    class="btn btn-sm btn-outline mt-2" 
+                    style="border-color: var(--warning); color: var(--warning); font-size: 0.75rem; padding: 4px 8px;">
+               ⭐ Оценить и получить +
+            </button>
           </div>
           <div class="history-item__right">
             <div :class="['badge', statusBadgeClass(item.status)]">{{ statusLabel(item.status) }}</div>
-            <div :class="['rep-delta', deltaClass(item.reputationDelta)]">{{ item.reputationDelta === '0' ? '—' : item.reputationDelta }}</div>
+            <div style="display:flex; align-items:center; gap:8px">
+              <div :class="['rep-delta', deltaClass(item.reputationDelta)]">{{ item.reputationDelta === '0' ? '—' : item.reputationDelta }}</div>
+              <button v-if="item.partner" class="icon-btn" style="color:var(--text-muted); font-size:1.2rem; padding:0" @click.stop="openReportDialog(item.partner.id)">⋮</button>
+            </div>
           </div>
         </div>
       </div>
 
     </div>
+
+    <ReportBlockDialog 
+      v-model="showReportDialog" 
+      :userId="reportTargetId" 
+      @blocked="onUserBlocked" 
+    />
+
+    <!-- Review-диалог -->
+    <Teleport to="body">
+      <div v-if="showReviewDialog" class="confirm-overlay" @click.self="showReviewDialog = false">
+        <div class="confirm-card anim-scale-in">
+          <div class="confirm-icon">⭐</div>
+          <h3 style="font-size:1.1rem">Оцени партнера и получи + к рейтингу</h3>
+          <p>Анонимно. Это поможет нам улучшить подбор.</p>
+          <div class="stars-container">
+            <span v-for="star in 5" :key="star" 
+                  class="star" 
+                  :class="{ active: star <= reviewRating }"
+                  @click="reviewRating = star"
+            >★</span>
+          </div>
+          <input v-model="reviewComment" placeholder="Комментарий (необязательно)" class="input chat-input" style="width:100%; margin: 10px 0; border: 1px solid var(--surface-2)"/>
+          <div class="confirm-btns">
+            <button class="btn btn-ghost btn-sm" @click="showReviewDialog = false">Отмена</button>
+            <button class="btn btn-sm btn-success" @click="submitReview" :disabled="reviewRating === 0">
+              Отправить
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { API_URL } from '../config';
+import ReportBlockDialog from './ReportBlockDialog.vue';
 
 interface HistoryItem {
   id: number; title: string; status: string;
   reputationDelta: string;
+  reviewed?: boolean;
   partner: { id: number; firstName: string } | null;
   createdAt: string;
 }
@@ -130,6 +173,46 @@ async function loadData() {
     reputation.value = profile.reputation ?? 5.0;
   } finally {
     loading.value = false;
+  }
+}
+
+const showReportDialog = ref(false);
+const reportTargetId = ref<number>(0);
+
+function openReportDialog(id: number) {
+  reportTargetId.value = id;
+  showReportDialog.value = true;
+}
+
+function onUserBlocked() {
+  loadData();
+}
+
+const showReviewDialog = ref(false);
+const reviewRating = ref(0);
+const reviewComment = ref('');
+const reviewMatchId = ref<number | null>(null);
+
+function openReviewDialog(matchId: number) {
+  reviewMatchId.value = matchId;
+  reviewRating.value = 0;
+  reviewComment.value = '';
+  showReviewDialog.value = true;
+}
+
+async function submitReview() {
+  if (!reviewMatchId.value) return;
+  const token = localStorage.getItem('token');
+  try {
+    await fetch(`${API_URL}/quests/match/${reviewMatchId.value}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ rating: reviewRating.value, comment: reviewComment.value }),
+    });
+    showReviewDialog.value = false;
+    loadData();
+  } catch (e) {
+    console.warn(e);
   }
 }
 
@@ -203,4 +286,31 @@ onMounted(loadData);
   background: var(--primary-soft);
   color: var(--primary);
 }
+.stars-container {
+  display: flex; gap: 8px; justify-content: center; margin: 16px 0; font-size: 2.2rem; cursor: pointer;
+}
+.star {
+  color: var(--text-light); transition: color 0.15s, transform 0.15s;
+}
+.star:hover { transform: scale(1.15); }
+.star.active { color: var(--warning); }
+.confirm-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(61, 53, 53, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.confirm-card {
+  background: var(--surface); border-radius: var(--radius);
+  padding: 28px 24px; width: 100%; max-width: 340px;
+  display: flex; flex-direction: column; gap: 12px; text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+.confirm-icon { font-size: 2.5rem; }
+.confirm-card h3 { margin: 0; }
+.confirm-card p { font-size: 0.9rem; }
+.confirm-btns { display: flex; gap: 10px; margin-top: 4px; }
+.confirm-btns .btn { flex: 1; }
+.anim-scale-in { display: flex; flex-direction: column; min-width: 300px; }
+.mt-2 { margin-top: 8px; }
 </style>

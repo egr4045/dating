@@ -126,9 +126,10 @@
   background: #1e2130;
   color: #6b7280;
 }
-.status-active { background: rgba(126, 200, 160, 0.12); color: #7ec8a0; }
-.status-banned  { background: rgba(232, 124, 124, 0.12); color: #e87c7c; }
-.status-waiting { background: rgba(245, 197, 138, 0.12); color: #f5c58a; }
+.status-active    { background: rgba(126, 200, 160, 0.12); color: #7ec8a0; }
+.status-banned    { background: rgba(232, 124, 124, 0.12); color: #e87c7c; }
+.status-waiting   { background: rgba(245, 197, 138, 0.12); color: #f5c58a; }
+.status-cancelled { background: rgba(156, 163, 175, 0.12); color: #9ca3af; }
 
 /* ─── Репутация ─── */
 .rep { font-weight: 700; }

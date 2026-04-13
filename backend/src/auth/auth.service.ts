@@ -47,11 +47,13 @@ export class AuthService implements OnModuleInit {
             });
 
             if (!user) {
+              const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
               user = await this.prisma.user.create({
                 data: {
                   telegramId: tgUser.id.toString(),
                   firstName: tgUser.first_name,
                   username: tgUser.username,
+                  referralCode,
                 },
               });
             }

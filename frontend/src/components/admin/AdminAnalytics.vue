@@ -104,6 +104,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { API_URL } from '../../config';
+import { adminFetch } from '../../utils/adminFetch';
 
 const summary = ref<any>(null);
 const loading = ref(true);
@@ -131,13 +132,10 @@ function setPeriod(p: { label: string; days: number }) {
 
 async function loadSummary() {
   loading.value = true;
-  const token = localStorage.getItem('adminToken');
   const params = new URLSearchParams({ from: dateFrom.value, to: dateTo.value + 'T23:59:59' });
 
   try {
-    const res = await fetch(`${API_URL}/admin/analytics/summary?${params}`, {
-      headers: { Authorization: `Bearer ${token || ''}` },
-    });
+    const res = await adminFetch(`${API_URL}/admin/analytics/summary?${params}`);
     summary.value = await res.json();
   } finally {
     loading.value = false;

@@ -139,17 +139,13 @@
       </div>
 
       <div class="field-group">
-        <label class="input-label">Возраст: {{ form.prefAgeMin }}–{{ form.prefAgeMax }} лет</label>
-        <div class="age-range-row">
-          <div class="age-range-item">
-            <span class="text-xs text-muted">От {{ form.prefAgeMin }}</span>
-            <input type="range" min="16" max="60" v-model.number="form.prefAgeMin" class="age-slider" />
-          </div>
-          <div class="age-range-item">
-            <span class="text-xs text-muted">До {{ form.prefAgeMax }}</span>
-            <input type="range" min="16" max="60" v-model.number="form.prefAgeMax" class="age-slider" />
-          </div>
-        </div>
+        <DualRangeSlider
+          :min="16"
+          :max="60"
+          label="Возраст"
+          v-model:modelValueMin="form.prefAgeMin"
+          v-model:modelValueMax="form.prefAgeMax"
+        />
       </div>
 
       <button class="btn btn-primary btn-full" :disabled="!form.prefGender" @click="step++">
@@ -211,8 +207,11 @@ import { useRouter } from 'vue-router';
 import { API_URL } from '../config';
 import { track } from '../analytics';
 import VideoRecorder from './VideoRecorder.vue';
+import DualRangeSlider from './DualRangeSlider.vue';
+import { useToast } from '../composables/useToast';
 
 const router = useRouter();
+const { error: toastError } = useToast();
 const step = ref(0);
 const totalSteps = 7;
 const saving = ref(false);
@@ -355,42 +354,46 @@ async function finish() {
 
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-  await fetch(`${API_URL}/users/profile`, {
-    method: 'PATCH',
-    headers,
-    body: JSON.stringify({
-      firstName: form.value.firstName || undefined,
-      age: form.value.age,
-      gender: form.value.gender || undefined,
-      city: form.value.city || undefined,
-      bio: form.value.bio || undefined,
-      photoUrl: form.value.photoUrl || undefined,
-      prefGender: form.value.prefGender || undefined,
-      prefAgeMin: form.value.prefAgeMin,
-      prefAgeMax: form.value.prefAgeMax,
-    }),
-  });
-
-  if (selectedInterests.value.length > 0) {
-    await fetch(`${API_URL}/users/interests`, {
-      method: 'POST',
+  try {
+    const resProfile = await fetch(`${API_URL}/users/profile`, {
+      method: 'PATCH',
       headers,
-      body: JSON.stringify({ interests: selectedInterests.value }),
+      body: JSON.stringify({
+        firstName: form.value.firstName || undefined,
+        age: form.value.age,
+        gender: form.value.gender || undefined,
+        city: form.value.city || undefined,
+        bio: form.value.bio || undefined,
+        photoUrl: form.value.photoUrl || undefined,
+        prefGender: form.value.prefGender || undefined,
+        prefAgeMin: form.value.prefAgeMin,
+        prefAgeMax: form.value.prefAgeMax,
+      }),
     });
-  }
+    if (!resProfile.ok) throw new Error('Failed to update profile');
 
-  if (videoBlob.value) {
-    const formData = new FormData();
-    formData.append('video', videoBlob.value, 'verification.webm');
-    try {
-      await fetch(`${API_URL}/users/video`, {
+    if (selectedInterests.value.length > 0) {
+      const resInt = await fetch(`${API_URL}/users/interests`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ interests: selectedInterests.value }),
+      });
+      if (!resInt.ok) throw new Error('Failed to save interests');
+    }
+
+    if (videoBlob.value) {
+      const formData = new FormData();
+      formData.append('video', videoBlob.value, 'verification.webm');
+      const resVid = await fetch(`${API_URL}/users/video`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-    } catch {
-      console.error('Ошибка загрузки видео');
+      if (!resVid.ok) throw new Error('Failed to upload video');
     }
+  } catch (err: any) {
+    console.error(err);
+    toastError('Ошибка при сохранении профиля');
   }
 
   track('onboarding_complete');

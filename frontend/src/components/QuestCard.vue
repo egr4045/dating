@@ -18,6 +18,7 @@
       <div class="event-card__badges">
         <div class="payment-badge">🤝 50/50</div>
         <div v-if="quest.price" class="badge badge-muted">💰 {{ quest.price }}</div>
+        <div class="share-icon-btn" @click.stop="shareQuest">🔗</div>
       </div>
 
       <!-- Заголовок внутри фото -->
@@ -41,6 +42,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import interact from 'interactjs';
+import { useToast } from '../composables/useToast';
 
 const props = defineProps<{
   quest: {
@@ -62,6 +64,7 @@ const y = ref(0);
 const rotation = ref(0);
 const isInteracting = ref(false);
 const interactElement = ref<HTMLElement>();
+const { success: toastSuccess } = useToast();
 
 const cardStyle = computed(() => ({
   transform: `translate3d(${x.value}px, ${y.value}px, 0) rotate(${rotation.value}deg)`,
@@ -97,9 +100,13 @@ onMounted(() => {
       isInteracting.value = false;
       if (x.value > 110) {
         x.value = 1000;
+        rotation.value = 30;
+        navigator.vibrate?.(40);
         emit('swipeRight', props.quest.id);
       } else if (x.value < -110) {
         x.value = -1000;
+        rotation.value = -30;
+        navigator.vibrate?.(40);
         emit('swipeLeft', props.quest.id);
       } else {
         x.value = 0;
@@ -109,6 +116,35 @@ onMounted(() => {
     },
   });
 });
+
+async function shareQuest() {
+  const shareData = {
+    title: props.quest.title,
+    text: props.quest.description,
+    url: `${window.location.origin}/quest/${props.quest.id}`,
+  };
+
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+    } else {
+      await navigator.clipboard.writeText(shareData.url);
+      toastSuccess('Ссылка на квест скопирована!');
+    }
+  } catch (err) {
+    console.error('Share failed:', err);
+  }
+}
+
+function triggerSwipe(direction: 'right' | 'left') {
+  isInteracting.value = false;
+  x.value = direction === 'right' ? 1000 : -1000;
+  rotation.value = direction === 'right' ? 30 : -30;
+  navigator.vibrate?.(40);
+  emit(direction === 'right' ? 'swipeRight' : 'swipeLeft', props.quest.id);
+}
+
+defineExpose({ triggerSwipe });
 </script>
 
 <style scoped>
@@ -158,6 +194,23 @@ onMounted(() => {
   gap: 6px;
   align-items: flex-end;
 }
+
+.share-icon-btn {
+  width: 32px;
+  height: 32px;
+  background: rgba(255,255,255,0.25);
+  backdrop-filter: blur(8px);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.2);
+  transition: transform 0.1s;
+}
+.share-icon-btn:active { transform: scale(1.2); }
 
 .event-card__title-area {
   color: #fff;
