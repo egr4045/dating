@@ -38,7 +38,8 @@ export function usePush() {
       }
 
       // 2. Регистрация SW (если еще нет)
-      const registration = await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.register('/sw.js');
+      const registration = await navigator.serviceWorker.ready;
       
       // 3. Подписка
       const subscription = await registration.pushManager.subscribe({

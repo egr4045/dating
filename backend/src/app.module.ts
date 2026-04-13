@@ -7,7 +7,7 @@ import { UsersModule } from './users/users.module';
 import { QuestsModule } from './quests/quests.module';
 import { ChatModule } from './chat/chat.module';
 import { NotificationsModule } from './notifications/notifications.module';
-import { PrismaService } from './prisma/prisma.service';
+import { PrismaModule } from './prisma/prisma.module';
 import { AdminModule } from './admin/admin.module';
 import { PushModule } from './push/push.module';
 
@@ -23,11 +23,11 @@ import { PushModule } from './push/push.module';
     QuestsModule,
     ChatModule,
     NotificationsModule,
+    PrismaModule,
     AdminModule,
     PushModule,
   ],
   providers: [
-    PrismaService,
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
