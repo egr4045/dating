@@ -220,10 +220,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { adminFetch } from '../../utils/adminFetch';
+import { API_URL } from '../../config';
 
-const ADMIN_URL = (import.meta as any).env?.VITE_API_URL
-  ? (import.meta as any).env.VITE_API_URL
-  : (typeof window !== 'undefined' ? window.location.origin + '/api' : '/api');
+const ADMIN_URL = API_URL;
 
 // ── State ───────────────────────────────────────────────────────────────────
 const quests = ref<any[]>([]);

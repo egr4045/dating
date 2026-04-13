@@ -7,6 +7,10 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: 80,
+    hmr: {
+      host: '127.0.0.1',
+      port: 80,
+    },
   },
   build: {
     // Source maps для Sentry (можно отключить если не нужны)
