@@ -1,5 +1,6 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService } from '../push/push.service';
 import { ChatGateway } from '../chat/chat.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -9,14 +10,20 @@ export class QuestsService {
   constructor(
     private prisma: PrismaService,
     private chatGateway: ChatGateway,
-    private notifications: NotificationsService
-    ){}
+    private notifications: NotificationsService,
+    private pushService: PushService
+  ) {}
 
-  async getAvailableQuests(userId: number) {
+  async getAvailableQuests(userId: number, filters?: any) {
     // Проверка бана
     const currentUser = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { interests: true, bannedUntil: true }
+      select: { 
+        interests: true, bannedUntil: true, age: true, gender: true, 
+        prefAgeMin: true, prefAgeMax: true, prefGender: true,
+        blocksGiven: { select: { blockedId: true } },
+        blocksReceived: { select: { blockerId: true } }
+      }
     });
     if (!currentUser) return [];
 
@@ -25,19 +32,55 @@ export class QuestsService {
       throw new ForbiddenException(`Ты забанен на ${daysLeft} дн. из-за низкой репутации`);
     }
 
-    // Показываем лобби только если они "свежие" (созданы не более 15 минут назад)
     const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
     const interests = currentUser.interests.length > 0 ? currentUser.interests : ['_unlikely_interest_'];
     
+    const hostConditions = [];
+    const prefAgeMin = filters?.ageMin !== undefined ? filters.ageMin : currentUser.prefAgeMin;
+    const prefAgeMax = filters?.ageMax !== undefined ? filters.ageMax : currentUser.prefAgeMax;
+    const prefGender = (filters?.prefGender && filters.prefGender !== 'any') 
+      ? filters.prefGender 
+      : (currentUser.prefGender !== 'any' ? currentUser.prefGender : null);
+
+    if (prefAgeMin) hostConditions.push({ age: { gte: prefAgeMin } });
+    if (prefAgeMax) hostConditions.push({ age: { lte: prefAgeMax } });
+    if (prefGender) hostConditions.push({ gender: prefGender });
+    
+    if (currentUser.age) {
+      hostConditions.push({ OR: [{ prefAgeMin: null }, { prefAgeMin: { lte: currentUser.age } }] });
+      hostConditions.push({ OR: [{ prefAgeMax: null }, { prefAgeMax: { gte: currentUser.age } }] });
+    }
+    if (currentUser.gender) {
+      hostConditions.push({ OR: [{ prefGender: null }, { prefGender: 'any' }, { prefGender: currentUser.gender }] });
+    }
+
+    const blockedIds = [
+      ...(currentUser.blocksGiven?.map(b => b.blockedId) || []),
+      ...(currentUser.blocksReceived?.map(b => b.blockerId) || [])
+    ];
+
+    const lobbyWhere: any = {
+      status: 'WAITING',
+      hostId: { notIn: [userId, ...blockedIds] },
+      createdAt: { gte: fifteenMinsAgo },
+      ...(hostConditions.length > 0 ? { host: { AND: hostConditions } } : {})
+    };
+
     let results = [];
+
+    let templateCondition = {};
+    if (filters?.category) {
+      templateCondition = { category: filters.category };
+    }
 
     // Приоритет 1: Есть активные лобби + совпадает по интересам
     const tier1 = await this.prisma.questTemplate.findMany({
       where: {
+        ...templateCondition,
         subcategory: { in: interests },
-        lobbies: { some: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } }
+        lobbies: { some: lobbyWhere }
       },
-      include: { lobbies: { where: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } } },
+      include: { lobbies: { where: lobbyWhere } },
       take: 20
     });
     results.push(...tier1);
@@ -46,10 +89,11 @@ export class QuestsService {
     if (results.length < 20) {
       const tier2 = await this.prisma.questTemplate.findMany({
         where: {
+          ...templateCondition,
           subcategory: { notIn: interests },
-          lobbies: { some: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } }
+          lobbies: { some: lobbyWhere }
         },
-        include: { lobbies: { where: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } } },
+        include: { lobbies: { where: lobbyWhere } },
         take: 20 - results.length
       });
       results.push(...tier2);
@@ -59,10 +103,11 @@ export class QuestsService {
     if (results.length < 20) {
       const tier3 = await this.prisma.questTemplate.findMany({
         where: {
+          ...templateCondition,
           subcategory: { in: interests },
-          lobbies: { none: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } }
+          lobbies: { none: lobbyWhere }
         },
-        include: { lobbies: { where: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } } },
+        include: { lobbies: { where: lobbyWhere } },
         take: 20 - results.length
       });
       results.push(...tier3);
@@ -72,20 +117,85 @@ export class QuestsService {
     if (results.length < 20) {
       const tier4 = await this.prisma.questTemplate.findMany({
         where: {
+          ...templateCondition,
           subcategory: { notIn: interests },
-          lobbies: { none: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } }
+          lobbies: { none: lobbyWhere }
         },
-        include: { lobbies: { where: { status: 'WAITING', hostId: { not: userId }, createdAt: { gte: fifteenMinsAgo } } } },
+        include: { lobbies: { where: lobbyWhere } },
         take: 20 - results.length
       });
       results.push(...tier4);
     }
 
+    // ── Спонсорские квесты: вставляем каждый 5-й ─────────────────────────────
+    const sponsored = await this.prisma.questTemplate.findMany({
+      where: { sponsored: true, sponsorBudget: { gt: 0 } },
+      take: 4,
+    });
+
+    if (sponsored.length > 0) {
+      let sIdx = 0;
+      const injected = [];
+      for (let i = 0; i < results.length; i++) {
+        if ((i + 1) % 5 === 0 && sIdx < sponsored.length) {
+          // Помечаем как спонсорский для фронтенда
+          injected.push({ ...sponsored[sIdx], _sponsored: true });
+          sIdx++;
+        }
+        injected.push(results[i]);
+      }
+      // Списываем бюджет у использованных спонсоров
+      const usedIds = sponsored.slice(0, sIdx).map(s => s.id);
+      if (usedIds.length > 0) {
+        await this.prisma.$executeRaw`
+          UPDATE "QuestTemplate"
+          SET "sponsorBudget" = "sponsorBudget" - 1
+          WHERE id = ANY(${usedIds}::text[]) AND "sponsorBudget" > 0
+        `;
+      }
+      return injected;
+    }
+
     return results;
+  }
+
+  async getMapQuests(userId: number, category?: string) {
+    const where: any = { lat: { not: null }, lon: { not: null } };
+    if (category) where.category = category;
+
+    const templates = await this.prisma.questTemplate.findMany({
+      where,
+      select: {
+        id: true, title: true, description: true, category: true, subcategory: true,
+        imageUrl: true, address: true, price: true, lat: true, lon: true,
+        sponsored: true, sponsorName: true, sponsorLogo: true,
+        lobbies: {
+          where: { status: 'WAITING' },
+          select: { id: true },
+        },
+      },
+      take: 200,
+    });
+
+    return templates.map(t => ({
+      ...t,
+      _waitingCount: t.lobbies.length,
+      lobbies: undefined,
+    }));
   }
 
   async handleSwipe(userId: number, questId: string, action: 'like' | 'dislike') {
     if (action === 'dislike') return { status: 'ignored' };
+
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { 
+        age: true, gender: true, prefAgeMin: true, prefAgeMax: true, prefGender: true,
+        blocksGiven: { select: { blockedId: true } },
+        blocksReceived: { select: { blockerId: true } }
+      }
+    });
+    if (!currentUser) return { status: 'error', message: 'User not found' };
 
     // Проверяем, существует ли шаблон вообще
     const template = await this.prisma.questTemplate.findUnique({ where: { id: questId } });
@@ -103,12 +213,31 @@ export class QuestsService {
     const txResult = await this.prisma.$transaction(async (tx) => {
       const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
 
+      const hostConditions = [];
+      if (currentUser.prefAgeMin) hostConditions.push({ age: { gte: currentUser.prefAgeMin } });
+      if (currentUser.prefAgeMax) hostConditions.push({ age: { lte: currentUser.prefAgeMax } });
+      if (currentUser.prefGender && currentUser.prefGender !== 'any') hostConditions.push({ gender: currentUser.prefGender });
+      
+      if (currentUser.age) {
+        hostConditions.push({ OR: [{ prefAgeMin: null }, { prefAgeMin: { lte: currentUser.age } }] });
+        hostConditions.push({ OR: [{ prefAgeMax: null }, { prefAgeMax: { gte: currentUser.age } }] });
+      }
+      if (currentUser.gender) {
+        hostConditions.push({ OR: [{ prefGender: null }, { prefGender: 'any' }, { prefGender: currentUser.gender }] });
+      }
+
+      const blockedIds = [
+        ...(currentUser.blocksGiven?.map(b => b.blockedId) || []),
+        ...(currentUser.blocksReceived?.map(b => b.blockerId) || [])
+      ];
+
       const existingLobby = await tx.questLobby.findFirst({
         where: {
           templateId: questId,
           status: 'WAITING',
-          hostId: { not: userId },
+          hostId: { notIn: [userId, ...blockedIds] },
           createdAt: { gte: fifteenMinsAgo },
+          ...(hostConditions.length > 0 ? { host: { AND: hostConditions } } : {})
         },
       });
 
@@ -165,6 +294,21 @@ export class QuestsService {
           participant.telegramId,
           `🎉 Мэтч! ${match.host.firstName} тоже хочет "${match.template.title}". Выберите дату!`,
         );
+
+        // WEB PUSH для обоих
+        this.pushService.sendToUser(
+          match.hostId,
+          'У тебя новый матч! 🌟',
+          `${participant.firstName} тоже хочет пойти на "${match.template.title}"`,
+          `/match/${match.id}/schedule`
+        ).catch(() => {});
+
+        this.pushService.sendToUser(
+          userId,
+          'У тебя новый матч! 🌟',
+          `${match.host.firstName} тоже хочет пойти на "${match.template.title}"`,
+          `/match/${match.id}/schedule`
+        ).catch(() => {});
       }
     }
 
@@ -254,11 +398,11 @@ export class QuestsService {
     return this.prisma.questLobby.findUnique({
       where: { id: matchId },
       include: {
-        host: true,
-        participant: true,
+        host: { include: { photos: { orderBy: { order: 'asc' } }, achievements: true } },
+        participant: { include: { photos: { orderBy: { order: 'asc' } }, achievements: true } },
         template: true,
         // Грузим последние 50 сообщений — дальше через /messages?cursor=
-        messages: { orderBy: { createdAt: 'desc' }, take: 50 },
+        messages: { orderBy: { createdAt: 'desc' }, take: 50, include: { reactions: true } },
       },
     });
   }
@@ -272,6 +416,7 @@ export class QuestsService {
       where: { matchId },
       orderBy: { createdAt: 'desc' },
       take: 50,
+      include: { reactions: true },
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
 
@@ -291,37 +436,78 @@ export class QuestsService {
     const match = await this.prisma.questLobby.findUnique({ where: { id: matchId } });
     if (!match) return null;
 
-    const reputationDelta = status === 'COMPLETED' ? 0.5 : -1.0;
-    const userIds = [match.hostId, ...(match.participantId ? [match.participantId] : [])];
-    const banUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const configs = await this.prisma.appConfig.findMany();
+    const configMap = Object.fromEntries(configs.map(c => [c.key, c.value]));
+    
+    // Бонус не даётся при COMPLETED — он перенесён в leaveReview
+    const penalty = parseFloat(configMap['repFailedPenalty']) || 1.0;
+    const threshold = parseFloat(configMap['repBanThreshold']) || 2.0;
+    const banDays = parseInt(configMap['repBanDays'], 10) || 30;
 
-    // Всё в одной транзакции: статус матча + репутация + бан
+    const reputationDelta = status === 'COMPLETED' ? 0 : -penalty;
+    const userIds = [match.hostId, ...(match.participantId ? [match.participantId] : [])];
+    const banUntil = new Date(Date.now() + banDays * 24 * 60 * 60 * 1000);
+
     const [updated] = await this.prisma.$transaction([
       // 1. Обновляем статус матча
       this.prisma.questLobby.update({ where: { id: matchId }, data: { status } }),
     ]);
 
-    // 2. Обновляем репутацию каждого участника атомарно (read → clamp → write)
+    // 2. Обновляем репутацию каждого участника атомарно
     await this.prisma.$transaction(async (tx) => {
       for (const uid of userIds) {
         const current = await tx.user.findUnique({
           where: { id: uid },
-          select: { reputation: true, bannedUntil: true },
+          select: { reputation: true, bannedUntil: true, xp: true },
         });
         if (!current) continue;
 
         const newReputation = Math.max(0, current.reputation + reputationDelta);
+        const newXp = status === 'COMPLETED' ? current.xp + 100 : current.xp;
 
         await tx.user.update({
           where: { id: uid },
           data: {
             reputation: newReputation,
-            // Бан: если упала ниже 2.0 и ещё не забанен
-            ...(newReputation < 2.0 && !current.bannedUntil ? { bannedUntil: banUntil } : {}),
+            xp: newXp,
+            // Бан: если упала ниже порога и ещё не забанен
+            ...(newReputation < threshold && !current.bannedUntil ? { bannedUntil: banUntil } : {}),
           },
         });
+
+        // РЕФЕРАЛЬНЫЙ БОНУС
+        if (status === 'COMPLETED') {
+          const uData = await tx.user.findUnique({ where: { id: uid }, select: { referredById: true } });
+          if (uData?.referredById) {
+            const completedCount = await tx.questLobby.count({
+              where: {
+                id: { not: matchId },
+                status: 'COMPLETED',
+                OR: [{ hostId: uid }, { participantId: uid }]
+              }
+            });
+            if (completedCount === 0) {
+              const referrer = await tx.user.findUnique({ where: { id: uData.referredById }, select: { reputation: true } });
+              if (referrer) {
+                await tx.user.update({
+                  where: { id: uData.referredById },
+                  data: { reputation: referrer.reputation + 0.3 }
+                });
+              }
+            }
+          }
+        }
       }
     });
+
+    if (status === 'COMPLETED') {
+      try {
+        await this.prisma.userAchievement.createMany({
+          data: userIds.map(uid => ({ userId: uid, badgeId: 'FIRST_MATCH' })),
+          skipDuplicates: true,
+        });
+      } catch (e) {}
+    }
 
     return updated;
   }
@@ -419,13 +605,26 @@ export class QuestsService {
       take: 50,
     });
 
+    const configs = await this.prisma.appConfig.findMany();
+    const configMap = Object.fromEntries(configs.map(c => [c.key, c.value]));
+    const bonus = parseFloat(configMap['repCompletedBonus']) || 0.5;
+    const penalty = parseFloat(configMap['repFailedPenalty']) || 1.0;
+
+    const reviews = await this.prisma.matchReview.findMany({
+      where: { reviewerId: userId, matchId: { in: lobbies.map(l => l.id) } },
+      select: { matchId: true }
+    });
+    const reviewedSet = new Set(reviews.map(r => r.matchId));
+
     return lobbies.map(l => ({
       id: l.id,
       title: l.template.title,
       subcategory: l.template.subcategory,
       imageUrl: l.template.imageUrl,
       status: l.status,
-      reputationDelta: l.status === 'COMPLETED' ? '+0.5' : l.status === 'FAILED' ? '-1.0' : '0',
+      // Чтобы не путать пользователя, показываем бонус только если он реально был.
+      reputationDelta: l.status === 'COMPLETED' ? `+${bonus}` : l.status === 'FAILED' ? `-${penalty}` : '0',
+      reviewed: reviewedSet.has(l.id),
       partner: l.hostId === userId 
         ? l.participant 
         : l.host,
@@ -450,5 +649,85 @@ export class QuestsService {
     if (result.count > 0) {
       console.log(`[Cron] Cleared ${result.count} stale lobbies.`);
     }
+  }
+
+  async leaveReview(matchId: number, reviewerId: number, rating: number, comment?: string) {
+    const match = await this.prisma.questLobby.findUnique({ where: { id: matchId } });
+    if (!match) throw new Error('Матч не найден');
+
+    if (match.status !== 'COMPLETED') {
+      throw new Error('Оценивать можно только завершенные встречи');
+    }
+
+    if (match.hostId !== reviewerId && match.participantId !== reviewerId) {
+      throw new Error('Доступ запрещен');
+    }
+
+    const targetId = match.hostId === reviewerId ? match.participantId : match.hostId;
+    if (!targetId) throw new Error('Оппонент не найден');
+
+    const existing = await this.prisma.matchReview.findUnique({
+      where: { matchId_reviewerId: { matchId, reviewerId } }
+    });
+    if (existing) throw new Error('Вы уже оставили отзыв на эту встречу');
+
+    const review = await this.prisma.matchReview.create({
+      data: { matchId, reviewerId, targetId, rating, comment }
+    });
+
+    const configs = await this.prisma.appConfig.findMany();
+    const configMap = Object.fromEntries(configs.map(c => [c.key, c.value]));
+    
+    // Бонус тому, КОГО оценили (максимальный при 5 звездах)
+    const maxBonus = parseFloat(configMap['repCompletedBonus']) || 0.5;
+    const targetMultiplier = (rating - 1) / 4; // 1->0, 3->0.5, 5->1
+    const targetBonus = Math.max(0, maxBonus * targetMultiplier);
+
+    // Бонус тому, КТО оценивает (фиксированно)
+    const reviewerBonus = 0.1;
+    const reviewerXpBonus = 20;
+    const targetXpBonus = rating === 5 ? 30 : (rating >= 4 ? 10 : 0);
+
+    await this.prisma.$transaction(async (tx) => {
+       const revUser = await tx.user.findUnique({ where: { id: reviewerId }, select: { reputation: true, xp: true } });
+       if (revUser) {
+          await tx.user.update({ where: { id: reviewerId }, data: { reputation: revUser.reputation + reviewerBonus, xp: revUser.xp + reviewerXpBonus } });
+       }
+
+       const tgtUser = await tx.user.findUnique({ where: { id: targetId }, select: { reputation: true, xp: true } });
+       if (tgtUser) {
+          await tx.user.update({ where: { id: targetId }, data: { reputation: tgtUser.reputation + targetBonus, xp: tgtUser.xp + targetXpBonus } });
+       }
+
+       const reviews = await tx.matchReview.aggregate({
+         where: { targetId },
+         _avg: { rating: true },
+         _count: { id: true }
+       });
+       if (reviews._count.id >= 10 && reviews._avg.rating && reviews._avg.rating >= 4.9) {
+          try {
+             await tx.userAchievement.create({
+                data: { userId: targetId, badgeId: 'PERFECT_RATING' }
+             });
+          } catch(e) {}
+       }
+    });
+
+    return review;
+  }
+
+  async getQuestTemplate(id: string) {
+    return this.prisma.questTemplate.findUnique({
+      where: { id }
+    });
+  }
+
+  async getLobbyCountForQuest(templateId: string) {
+    return this.prisma.questLobby.count({
+      where: {
+        templateId,
+        status: { in: ['WAITING', 'MATCHED'] }
+      }
+    });
   }
 }

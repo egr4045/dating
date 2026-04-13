@@ -19,17 +19,33 @@
 
     <!-- Партнёр (полная анкета теперь доступна) -->
     <div v-if="partner" class="partner-card">
-      <div class="partner-card__photo">
-        <img v-if="partner.photoUrl" :src="partner.photoUrl" class="partner-avatar-img" />
+      <div class="partner-card__photo" @click="nextPhoto">
+        <img v-if="currentPartnerPhoto" :src="currentPartnerPhoto" class="partner-avatar-img" />
         <div v-else class="avatar avatar-lg">{{ partner.firstName?.[0] }}</div>
+        
+        <div v-if="partner.photos?.length > 1" class="carousel-dots">
+          <span v-for="(p, i) in partner.photos" :key="p.id" class="dot" :class="{ active: i === currentPhotoIdx }"></span>
+        </div>
+
         <div v-if="partner.videoVerified" class="verified-badge">✅ Верифицирован</div>
       </div>
-      <div class="partner-card__info">
-        <div class="flex items-center gap-8">
+      <div class="partner-card__info" style="width: 100%">
+        <div class="flex items-center gap-8" style="width: 100%">
           <h3>{{ partner.firstName }}</h3>
+          <span v-if="partner.xp !== undefined" class="badge" style="background: var(--primary); color: #fff;">Ур. {{ getLevelInfo(partner.xp).level }}</span>
+          <span v-if="partner.streakDays > 0" class="text-sm font-bold" style="color: #ff4757; text-shadow: 0 0 8px rgba(255,71,87,0.4)">🔥{{ partner.streakDays }}</span>
           <span v-if="partner.age" class="badge badge-muted">{{ partner.age }} лет</span>
           <span v-if="partner.city" class="badge badge-muted">📍 {{ partner.city }}</span>
+          
+          <button class="icon-btn" style="margin-left:auto; color:var(--text-muted); font-size:1.3rem" @click="showReportDialog = true">⋮</button>
         </div>
+
+        <div v-if="partner.achievements?.length" style="display:flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px;">
+          <span v-for="b in partner.achievements" :key="b.badgeId" class="badge" style="background: var(--surface-2); font-size: 0.75rem; border: 1px solid #EDE8E5;">
+            {{ getBadge(b.badgeId).icon }} {{ getBadge(b.badgeId).label }}
+          </span>
+        </div>
+
         <p v-if="partner.bio" class="text-sm text-muted">{{ partner.bio }}</p>
         <div v-if="partner.interests?.length" class="chips-wrap">
           <span v-for="i in partner.interests.slice(0,5)" :key="i" class="chip chip-default chip-sm">
@@ -43,15 +59,53 @@
     <div class="chat-section">
       <div class="messages-list" ref="chatContainer">
         <div v-if="messages.length === 0" class="empty-chat">
-          Напиши «Привет!», чтобы начать общение 👋
+          <p class="empty-chat__hint">Начни разговор — выбери первое сообщение:</p>
+          <div class="quick-replies">
+            <button
+              v-for="reply in quickReplies"
+              :key="reply"
+              class="quick-reply-chip"
+              @click="sendQuickReply(reply)"
+            >{{ reply }}</button>
+          </div>
         </div>
         <div
           v-for="msg in messages"
           :key="msg.id"
-          :class="['message-bubble', msg.senderId === currentUserId ? 'my-message' : 'partner-message']"
+          class="message-wrapper"
         >
-          <span>{{ msg.text }}</span>
-          <span v-if="msg.senderId === currentUserId" class="read-tick" :class="{ read: msg.readByPartner }">✓✓</span>
+          <div
+            :class="['message-bubble', msg.senderId === currentUserId ? 'my-message' : 'partner-message']"
+            @touchstart="startPress($event, msg.id)"
+            @touchend="endPress"
+            @touchmove="cancelPress"
+            @mousedown="startPress($event, msg.id)"
+            @mouseup="endPress"
+            @mouseleave="cancelPress"
+            @contextmenu.prevent="openReactions(msg.id)"
+            style="position: relative; align-self: flex-start"
+            :style="msg.senderId === currentUserId ? 'align-self: flex-end;' : ''"
+          >
+            <span>{{ msg.text }}</span>
+            <span v-if="msg.senderId === currentUserId" class="read-tick" :class="{ read: msg.readByPartner }">✓✓</span>
+
+            <!-- Попап реакций -->
+            <div v-if="activeReactionMsgId === msg.id" class="reaction-popover" @click.stop>
+              <button v-for="em in availableEmojis" :key="em" @click.stop="toggleReaction(msg.id, em)" class="reaction-popover-btn">{{ em }}</button>
+            </div>
+          </div>
+
+          <div v-if="groupedReactions(msg.reactions)?.length > 0" class="reactions-row" :class="msg.senderId === currentUserId ? 'reactions-right' : 'reactions-left'">
+            <span 
+              v-for="r in groupedReactions(msg.reactions)" 
+              :key="r.emoji" 
+              class="reaction-pill"
+              :class="{ 'mine': r.hasMine }"
+              @click.stop="toggleReaction(msg.id, r.emoji)"
+            >
+              {{ r.emoji }} {{ r.count > 1 ? r.count : '' }}
+            </span>
+          </div>
         </div>
         <!-- Индикатор набора -->
         <div v-if="isPartnerTyping" class="message-bubble partner-message typing-bubble">
@@ -99,6 +153,38 @@
       </div>
     </Teleport>
 
+    <!-- Review-диалог -->
+    <Teleport to="body">
+      <div v-if="showReviewDialog" class="confirm-overlay" @click.self="skipReview">
+        <div class="confirm-card anim-scale-in">
+          <div class="confirm-icon">⭐</div>
+          <h3>Оцени партнера и получи + к рейтингу</h3>
+          <p>Анонимно. Это поможет нам улучшить подбор.</p>
+          <div class="stars-container">
+            <span v-for="star in 5" :key="star" 
+                  class="star" 
+                  :class="{ active: star <= reviewRating }"
+                  @click="reviewRating = star"
+            >★</span>
+          </div>
+          <input v-model="reviewComment" placeholder="Комментарий (необязательно)" class="input chat-input" style="width:100%; margin: 10px 0; border: 1px solid var(--surface-2)"/>
+          <div class="confirm-btns">
+            <button class="btn btn-ghost btn-sm" @click="skipReview">Пропустить</button>
+            <button class="btn btn-sm btn-success" @click="submitReview" :disabled="reviewRating === 0">
+              Отправить
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <ReportBlockDialog 
+      v-if="partner"
+      v-model="showReportDialog" 
+      :userId="partner.id" 
+      @blocked="onUserBlocked" 
+    />
+
   </div>
 </template>
 
@@ -108,9 +194,14 @@ import { useRoute, useRouter } from 'vue-router';
 import { io, Socket } from 'socket.io-client';
 import { API_URL } from '../config';
 import { track } from '../analytics';
+import { useToast } from '../composables/useToast';
+import ReportBlockDialog from './ReportBlockDialog.vue';
+import { getBadge } from '../utils/badges';
+import { getLevelInfo } from '../utils/levels';
 
 const route = useRoute();
 const router = useRouter();
+const { error: toastError, success: toastSuccess } = useToast();
 const match = ref<any>(null);
 const currentUserId = parseInt(localStorage.getItem('userId') || '0');
 const messages = ref<any[]>([]);
@@ -123,6 +214,16 @@ const confirmDialog = ref<{
   btnLabel: string; btnClass: string; onConfirm: () => void;
 } | null>(null);
 
+const showReportDialog = ref(false);
+const showReviewDialog = ref(false);
+const reviewRating = ref(0);
+const reviewComment = ref('');
+
+function onUserBlocked() {
+  toastSuccess('Встреча отменена');
+  router.push('/dashboard');
+}
+
 // Typing indicator
 const isPartnerTyping = ref(false);
 let partnerTypingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -131,9 +232,68 @@ let typingThrottle: ReturnType<typeof setTimeout> | null = null;
 let socket: Socket;
 let timerInterval: ReturnType<typeof setInterval> | null = null;
 
+const availableEmojis = ['❤️', '😂', '👍', '🔥', '😮', '😢'];
+const activeReactionMsgId = ref<number | null>(null);
+let pressTimer: ReturnType<typeof setTimeout> | null = null;
+
+function startPress(_e: Event, msgId: number) {
+  if (pressTimer) clearTimeout(pressTimer);
+  pressTimer = setTimeout(() => {
+    openReactions(msgId);
+    if (navigator.vibrate) navigator.vibrate(50);
+  }, 500);
+}
+function endPress() { if (pressTimer) clearTimeout(pressTimer); }
+function cancelPress() { if (pressTimer) clearTimeout(pressTimer); }
+function openReactions(msgId: number) {
+  activeReactionMsgId.value = activeReactionMsgId.value === msgId ? null : msgId;
+}
+
+function toggleReaction(messageId: number, emoji: string) {
+  activeReactionMsgId.value = null;
+  socket?.emit('toggleReaction', { messageId, emoji });
+  
+  // Optimistic UI
+  const msg = messages.value.find(m => m.id === messageId);
+  if (msg) {
+    if (!msg.reactions) msg.reactions = [];
+    const idx = msg.reactions.findIndex((r: any) => r.emoji === emoji && r.userId === currentUserId);
+    if (idx !== -1) msg.reactions.splice(idx, 1);
+    else msg.reactions.push({ emoji, userId: currentUserId });
+  }
+}
+
+function groupedReactions(reactions: any[]) {
+  if (!reactions || !reactions.length) return [];
+  const map = new Map<string, { emoji: string, count: number, hasMine: boolean }>();
+  for (const r of reactions) {
+    const existing = map.get(r.emoji);
+    if (existing) {
+      existing.count++;
+      if (r.userId === currentUserId) existing.hasMine = true;
+    } else {
+      map.set(r.emoji, { emoji: r.emoji, count: 1, hasMine: r.userId === currentUserId });
+    }
+  }
+  return Array.from(map.values());
+}
+
 const partner = computed(() => {
   if (!match.value) return null;
   return match.value.hostId === currentUserId ? match.value.participant : match.value.host;
+});
+
+const currentPhotoIdx = ref(0);
+function nextPhoto() {
+  if (partner.value?.photos?.length > 1) {
+    currentPhotoIdx.value = (currentPhotoIdx.value + 1) % partner.value.photos.length;
+  }
+}
+const currentPartnerPhoto = computed(() => {
+  if (partner.value?.photos?.length > 0) {
+    return partner.value.photos[currentPhotoIdx.value].url;
+  }
+  return partner.value?.photoUrl;
 });
 
 const heroStyle = computed(() => {
@@ -223,9 +383,23 @@ async function loadMatch() {
         m.senderId === currentUserId ? { ...m, readByPartner: true } : m
       );
     });
+    socket.on('reactionUpdated', (data: { messageId: number, userId: number, emoji: string, action: string }) => {
+      if (data.userId === currentUserId) return; // Optimistic update already handles this
+      const msg = messages.value.find(m => m.id === data.messageId);
+      if (!msg) return;
+      if (!msg.reactions) msg.reactions = [];
+      
+      const rIdx = msg.reactions.findIndex((r: any) => r.userId === data.userId && r.emoji === data.emoji);
+      if (data.action === 'added' && rIdx === -1) {
+        msg.reactions.push({ emoji: data.emoji, userId: data.userId });
+      } else if (data.action === 'removed' && rIdx !== -1) {
+        msg.reactions.splice(rIdx, 1);
+      }
+    });
     markAsRead();
   } catch (e) {
     console.error('Ошибка загрузки мэтча:', e);
+    toastError('Ошибка загрузки встречи');
   }
 }
 
@@ -240,25 +414,49 @@ function onTyping() {
 function sendMessage() {
   const text = newMessage.value.trim();
   if (!text || !socket) return;
-  // Очищаем input только после отправки в сокет
   socket.emit('sendMessage', { matchId: match.value.id, text });
   track('message_sent', { matchId: route.params.id });
   newMessage.value = '';
-  // сбрасываем throttle при отправке
   if (typingThrottle) { clearTimeout(typingThrottle); typingThrottle = null; }
+}
+
+const quickReplies = [
+  'Привет! 👋',
+  'Не могу дождаться нашей встречи!',
+  'Расскажи о себе 😊',
+  'Уже считаю дни до встречи ✨',
+];
+
+function sendQuickReply(text: string) {
+  if (!socket || !match.value) return;
+  socket.emit('sendMessage', { matchId: match.value.id, text });
+  track('quick_reply_sent', { matchId: route.params.id });
+  navigator.vibrate?.(20);
 }
 
 async function setStatus(status: 'COMPLETED' | 'FAILED') {
   const token = localStorage.getItem('token');
   if (!canFinish.value || !token) return;
   confirmDialog.value = null;
-  await fetch(`${API_URL}/quests/match/${match.value.id}/status`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ status }),
-  });
-  track('match_status_updated', { matchId: route.params.id, status });
-  router.push('/dashboard');
+  try {
+    const res = await fetch(`${API_URL}/quests/match/${match.value.id}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) throw new Error('Status failed');
+    toastSuccess('Статус встречи обновлен');
+    track('match_status_updated', { matchId: route.params.id, status });
+    
+    if (status === 'COMPLETED') {
+      showReviewDialog.value = true;
+    } else {
+      router.push('/dashboard');
+    }
+  } catch (e) {
+    console.error('Ошибка статуса:', e);
+    toastError('Не удалось изменить статус');
+  }
 }
 
 function cancelMatch() {
@@ -283,7 +481,32 @@ function finishMatch() {
   };
 }
 
-onMounted(loadMatch);
+async function submitReview() {
+  const token = localStorage.getItem('token');
+  if (!token || !match.value) return;
+  try {
+    const res = await fetch(`${API_URL}/quests/match/${match.value.id}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ rating: reviewRating.value, comment: reviewComment.value }),
+    });
+    if (!res.ok) throw new Error('Review failed');
+    toastSuccess('Отзыв отправлен, репутация повышена!');
+    router.push('/dashboard');
+  } catch (e) {
+    toastError('Не удалось отправить отзыв');
+  }
+}
+
+function skipReview() {
+  router.push('/dashboard');
+}
+
+onMounted(() => {
+  loadMatch();
+  // Клик мимо попапа реакций закрывает его
+  document.addEventListener('click', () => { activeReactionMsgId.value = null; });
+});
 onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval);
   if (partnerTypingTimer) clearTimeout(partnerTypingTimer);
@@ -346,6 +569,16 @@ onUnmounted(() => {
   border-radius: 100px;
   white-space: nowrap;
 }
+.carousel-dots {
+  position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 4px; pointer-events: none; z-index: 2;
+}
+.carousel-dots .dot {
+  width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.4);
+  transition: background 0.2s;
+}
+.carousel-dots .dot.active { background: #fff; box-shadow: 0 0 2px rgba(0,0,0,0.5); }
+
 .partner-card__info { display: flex; flex-direction: column; gap: 6px; }
 .chips-wrap { display: flex; flex-wrap: wrap; gap: 4px; }
 .chip-sm { padding: 3px 8px; font-size: 0.75rem; }
@@ -367,11 +600,42 @@ onUnmounted(() => {
   gap: 8px;
 }
 .empty-chat {
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
   margin: auto;
+  padding: 16px;
+  width: 100%;
 }
+.empty-chat__hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin: 0;
+}
+.quick-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 280px;
+}
+.quick-reply-chip {
+  background: var(--surface);
+  border: 2px solid rgba(232, 146, 124, 0.3);
+  border-radius: 14px;
+  padding: 10px 16px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.quick-reply-chip:hover { background: rgba(232, 146, 124, 0.08); border-color: var(--primary); }
+.quick-reply-chip:active { transform: scale(0.97); }
 .message-bubble {
   max-width: 78%;
   padding: 10px 14px;
@@ -438,7 +702,34 @@ onUnmounted(() => {
 .confirm-btns { display: flex; gap: 10px; margin-top: 4px; }
 .confirm-btns .btn { flex: 1; }
 
+.stars-container {
+  display: flex; gap: 8px; justify-content: center; margin: 16px 0; font-size: 2.2rem; cursor: pointer;
+}
+.star {
+  color: var(--text-light); transition: color 0.15s, transform 0.15s;
+}
+.star:hover { transform: scale(1.15); }
+.star.active { color: var(--warning); }
+
 /* Read receipts */
+.message-wrapper { display: flex; flex-direction: column; margin-bottom: 8px; width: 100%; }
+.reaction-popover {
+  position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 20px;
+  padding: 4px 8px; display: flex; gap: 4px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.reaction-popover-btn { background: none; border: none; font-size: 1.4rem; cursor: pointer; transition: transform 0.1s; display:flex; align-items:center; }
+.reaction-popover-btn:active { transform: scale(1.3); }
+
+.reactions-row { display: flex; gap: 4px; margin-top: -6px; z-index: 1; flex-wrap: wrap; margin-bottom: 4px; }
+.reactions-left { margin-left: 12px; align-self: flex-start; }
+.reactions-right { margin-right: 12px; align-self: flex-end; }
+.reaction-pill {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+  padding: 2px 6px; font-size: 0.8rem; cursor: pointer; user-select: none; color: var(--text-muted); display:flex; gap: 2px;
+}
+.reaction-pill.mine { background: rgba(99, 102, 241, 0.2); border-color: rgba(99, 102, 241, 0.5); color: #fff; }
+
 .message-bubble { display: flex; align-items: flex-end; gap: 4px; }
 .my-message { flex-direction: row-reverse; }
 .read-tick {

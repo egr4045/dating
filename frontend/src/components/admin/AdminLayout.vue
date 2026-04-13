@@ -33,6 +33,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { API_URL } from '../../config';
+import { adminFetch } from '../../utils/adminFetch';
 
 const router = useRouter();
 const pendingCount = ref(0);
@@ -43,16 +44,14 @@ const navItems = [
   { id: 'matches', path: '/admin/matches',  icon: '🤝', label: 'Матчи' },
   { id: 'chats', path: '/admin/chats',    icon: '💬', label: 'Чаты' },
   { id: 'quests', path: '/admin/quests',   icon: '🃏', label: 'Карточки' },
+  { id: 'partners', path: '/admin/partners', icon: '🤝', label: 'Партнёры' },
+  { id: 'config', path: '/admin/config',   icon: '⚙️', label: 'Настройки' },
   { id: 'analytics', path: '/admin/analytics',icon: '📊', label: 'Аналитика' },
 ];
 
 async function checkPending() {
-  const token = localStorage.getItem('adminToken');
-  if (!token) return;
   try {
-    const res = await fetch(`${API_URL}/admin/users?pendingVideo=true&limit=1`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    const res = await adminFetch(`${API_URL}/admin/users?pendingVideo=true&limit=1`);
     const data = await res.json();
     pendingCount.value = data.total || 0;
   } catch {}

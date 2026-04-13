@@ -2,6 +2,7 @@ import { WebSocketGateway, SubscribeMessage, MessageBody, ConnectedSocket, WebSo
 import { Server, Socket } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
+import { PushService } from '../push/push.service';
 
 // Разрешённые origins для WebSocket — берём из ALLOWED_ORIGINS или ставим дефолт для dev
 const WS_ALLOWED_ORIGINS: (string | RegExp)[] = [
@@ -27,7 +28,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  constructor(private prisma: PrismaService, private jwtService: JwtService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+    private pushService: PushService
+  ) {}
 
   async handleConnection(client: Socket) {
     console.log(`[Socket] Попытка подключения: ${client.id}`);
@@ -108,14 +113,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!this.checkRateLimit(senderId, 500)) return; // Ограничение: 2 сообщения в секунду
 
     // Валидация текста: санитизация и ограничение длины
-    const text = (data.text ?? '').trim().slice(0, 1000);
+    const text = (data.text ?? '').replace(/<[^>]*>/g, '').trim().slice(0, 1000);
     if (!text) return;
 
     const lobby = await this.prisma.questLobby.findUnique({ where: { id: data.matchId } });
     if (!lobby || (lobby.hostId !== senderId && lobby.participantId !== senderId)) return;
 
     const message = await this.prisma.message.create({
-      data: { matchId: data.matchId, senderId, text }
+      data: { matchId: data.matchId, senderId, text },
+      include: { reactions: true }
     });
 
     const isHost = lobby.hostId === senderId;
@@ -129,6 +135,62 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
 
     this.server.to(`match_${data.matchId}`).emit('newMessage', message);
+
+    // Отправка Push-уведомления получателю
+    const recipientId = isHost ? lobby.participantId : lobby.hostId;
+    if (recipientId) {
+      const sender = await this.prisma.user.findUnique({ where: { id: senderId }, select: { firstName: true } });
+      this.pushService.sendToUser(
+        recipientId,
+        `Новое сообщение от ${sender?.firstName || 'Пользователя'}`,
+        text.length > 50 ? text.slice(0, 47) + '...' : text,
+        `/match/${data.matchId}`
+      ).catch(err => console.error('Push notification failed', err));
+    }
+
     return message;
+  }
+
+  // ДОБАВИТЬ/АВТО-СНЯТЬ РЕАКЦИЮ
+  @SubscribeMessage('toggleReaction')
+  async handleToggleReaction(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { messageId: number; emoji: string }
+  ) {
+    const userId = client.data.userId;
+    const { messageId, emoji } = data;
+    if (!this.checkRateLimit(userId, 200)) return;
+
+    try {
+      const msg = await this.prisma.message.findUnique({
+        where: { id: messageId },
+        include: { match: true }
+      });
+      if (!msg) return;
+      if (msg.match.hostId !== userId && msg.match.participantId !== userId) return;
+
+      const existing = await this.prisma.messageReaction.findUnique({
+        where: { messageId_userId_emoji: { messageId, userId, emoji } }
+      });
+
+      let action = 'removed';
+      if (existing) {
+        await this.prisma.messageReaction.delete({ where: { id: existing.id } });
+      } else {
+        await this.prisma.messageReaction.create({
+          data: { messageId, userId, emoji }
+        });
+        action = 'added';
+      }
+
+      this.server.to(`match_${msg.matchId}`).emit('reactionUpdated', {
+        messageId,
+        userId,
+        emoji,
+        action
+      });
+    } catch (e) {
+      console.error('toggle reaction error', e);
+    }
   }
 }

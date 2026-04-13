@@ -1,12 +1,6 @@
 <template>
   <div class="page settings">
 
-    <Teleport to="body">
-      <Transition name="toast">
-        <div v-if="toast" :class="['s-toast', `s-toast--${toast.type}`]">{{ toast.message }}</div>
-      </Transition>
-    </Teleport>
-
     <header class="app-header">
       <button class="icon-btn" @click="$router.push('/dashboard')">←</button>
       <div class="app-header__logo">Настройки</div>
@@ -45,12 +39,47 @@
 
       <!-- Профиль -->
       <div class="card profile-card">
-        <div class="profile-photo">
-          <img v-if="profile?.photoUrl" :src="profile.photoUrl" class="avatar-img" />
-          <div v-else class="avatar avatar-xl">{{ profile?.firstName?.[0] }}</div>
+        <div class="photos-gallery">
+          <div v-if="!profile?.photos?.length && !profile?.photoUrl" class="avatar avatar-xl">{{ profile?.firstName?.[0] }}</div>
+          
+          <div class="photos-scroll">
+            <div v-if="!profile?.photos?.length && profile?.photoUrl" class="photo-item">
+              <img :src="profile.photoUrl" class="gallery-img" />
+            </div>
+
+            <div 
+              v-for="p in profile?.photos" 
+              :key="p.id" 
+              class="photo-item"
+            >
+              <img :src="p.url" class="gallery-img" />
+              <button class="photo-del-btn" @click="deletePhoto(p.id)">✕</button>
+            </div>
+            
+            <div class="photo-item add-photo-btn" @click="photoInput?.click()">
+              <span class="plus-icon">+</span>
+            </div>
+          </div>
+          <input ref="photoInput" type="file" accept="image/jpeg,image/png" style="display:none" @change="uploadPhoto" />
         </div>
         <div class="profile-info">
-          <h2>{{ profile?.firstName }}</h2>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <h2>{{ profile?.firstName }}</h2>
+            <div v-if="profile?.streakDays > 0" class="badge" style="background: var(--danger-soft); color: var(--danger); font-size: 0.9rem; border-radius: 100px;">
+              🔥 {{ profile.streakDays }}
+            </div>
+          </div>
+
+          <!-- Прогресс экспы -->
+          <div v-if="profile && profile.xp !== undefined" style="margin-bottom: 8px;">
+            <div style="display:flex; justify-content:space-between; font-size: 0.8rem; margin-bottom: 4px; font-weight: 600;">
+              <span style="color: var(--primary);">Ур. {{ getLevelInfo(profile.xp).level }}</span>
+              <span class="text-muted">{{ profile.xp }} / {{ getLevelInfo(profile.xp).nextLvlXp }} XP</span>
+            </div>
+            <div class="progress-bar" style="height: 6px; background: var(--surface-2); border-radius: 4px; overflow: hidden;">
+              <div class="progress-bar__fill" :style="{ width: getLevelInfo(profile.xp).progressPercent + '%', background: 'var(--primary)', height: '100%', borderRadius: '4px' }" />
+            </div>
+          </div>
           <div class="profile-meta">
             <span v-if="profile?.age" class="badge badge-muted">{{ profile.age }} лет</span>
             <span v-if="profile?.city" class="badge badge-muted">📍 {{ profile.city }}</span>
@@ -61,6 +90,24 @@
         <button class="btn btn-ghost btn-sm" style="margin-top:4px" @click="showPreview = true">
           👁 Как меня видят
         </button>
+      </div>
+
+      <!-- Достижения -->
+      <div class="card" v-if="profile">
+        <h3 class="section-title" style="margin-bottom:12px">🏆 Мои достижения</h3>
+        <div v-if="!profile.achievements?.length" class="text-sm text-muted" style="text-align: center; padding: 10px;">
+          Получай достижения за встречи и идеальную репутацию!
+        </div>
+        <div v-else style="display:flex; gap: 8px; flex-wrap: wrap;">
+          <div v-for="b in profile.achievements" :key="b.badgeId" 
+               style="background: var(--surface-2); padding: 8px 12px; border-radius: 12px; border: 1px solid var(--border); display:flex; align-items:center; gap: 6px;">
+            <span style="font-size: 1.5rem">{{ getBadge(b.badgeId).icon }}</span>
+            <div style="display:flex; flex-direction:column; line-height: 1.2;">
+              <span style="font-weight: 700; font-size: 0.85rem">{{ getBadge(b.badgeId).label }}</span>
+              <span style="font-size: 0.7rem; color: var(--text-muted)">{{ getBadge(b.badgeId).desc }}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Превью профиля (модалка) -->
@@ -104,6 +151,28 @@
         <p class="text-xs text-muted" style="margin-top:6px">{{ repHint }}</p>
       </div>
 
+      <!-- Рефералка -->
+      <div class="card">
+        <div class="section-label">Пригласи друга</div>
+        <p class="text-xs text-muted">Получи +0.3 к рейтингу, когда твой друг завершит свою первую встречу.</p>
+        
+        <div style="background: var(--surface-2); border-radius: 12px; padding: 12px; display: flex; align-items: center; justify-content: space-between; margin-top: 10px; border: 1px solid var(--border)">
+          <div>
+            <span class="text-xs text-muted" style="display:block">Твой код:</span>
+            <span style="font-weight: bold; font-family: monospace; font-size: 1.1rem;">{{ profile?.referralCode }}</span>
+          </div>
+          <button class="btn btn-ghost btn-sm" @click="copyReferralLink">Копировать ссылку</button>
+        </div>
+
+        <div v-if="!profile?.referredById" style="margin-top: 16px; border-top: 1px solid var(--border); padding-top: 16px;">
+          <div class="section-label">Есть код приглашения?</div>
+          <div style="display:flex; gap: 8px; margin-top: 8px;">
+            <input v-model="inputReferralCode" placeholder="ABCDEF" class="input chat-input" style="flex:1" maxlength="10" />
+            <button class="btn btn-primary btn-sm" @click="applyReferral" :disabled="!inputReferralCode.trim() || applyingReferral">Ок</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Интересы -->
       <div class="card">
         <div class="section-label">🎯 Мои интересы</div>
@@ -124,6 +193,58 @@
         </button>
       </div>
 
+      <!-- Расписание -->
+      <div class="card">
+        <div class="section-label">🕒 Моя доступность</div>
+        <p class="text-xs text-muted" style="margin-bottom:12px;">Отметь дни и примерное время, когда тебе удобно ходить на встречи</p>
+        
+        <div class="slots-list">
+          <div v-for="d in daysConfig" :key="d.val" class="slot-row">
+            <button 
+              class="slot-day-btn" 
+              :class="{ active: d.active }"
+              @click="d.active = !d.active"
+            >
+              {{ d.label }}
+            </button>
+            <div v-if="d.active" class="slot-times">
+              <input type="time" v-model="d.timeFrom" class="slot-time-input" />
+              <span>–</span>
+              <input type="time" v-model="d.timeTo" class="slot-time-input" />
+            </div>
+            <div v-else class="slot-off text-xs text-muted">Недоступен</div>
+          </div>
+        </div>
+        
+        <button class="btn btn-primary btn-full btn-sm" @click="saveSlots" :disabled="savingSlots" style="margin-top:12px">
+          {{ savingSlots ? 'Сохранение...' : 'Сохранить расписание' }}
+        </button>
+      </div>
+
+      <!-- Push-уведомления -->
+      <div v-if="pushSupported" class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+        <div>
+          <div style="font-weight:700">Уведомления 🔔</div>
+          <div class="text-xs text-muted">{{ pushSubscribed ? 'Включены — не пропустишь матч' : 'Узнавай о новых матчах' }}</div>
+        </div>
+        <div class="theme-switch">
+          <input type="checkbox" id="pushSwitch" :checked="pushSubscribed" @change="togglePush" :disabled="pushLoading" />
+          <label for="pushSwitch" class="switch-ui"></label>
+        </div>
+      </div>
+
+      <!-- Темная тема -->
+      <div class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+        <div>
+          <div style="font-weight:700">Тёмная тема 🌙</div>
+          <div class="text-xs text-muted">Снижает нагрузку на глаза</div>
+        </div>
+        <div class="theme-switch">
+          <input type="checkbox" id="themeSwitch" v-model="isDarkTheme" @change="toggleTheme" />
+          <label for="themeSwitch" class="switch-ui"></label>
+        </div>
+      </div>
+
       <!-- Предпочтения партнёра -->
       <div class="card">
         <div class="section-label">👥 Ищу партнёра</div>
@@ -141,22 +262,51 @@
         </button>
       </div>
 
+      <!-- Удаление аккаунта -->
+      <div style="margin-top:24px;margin-bottom:16px;">
+        <button class="btn btn-ghost btn-full text-sm" style="color:var(--danger)" @click="deleteAccount">Удалить аккаунт</button>
+      </div>
+
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { API_URL } from '../config';
 import { track } from '../analytics';
+import { useToast } from '../composables/useToast';
+import { getBadge } from '../utils/badges';
+import { getLevelInfo } from '../utils/levels';
+import { usePush } from '../composables/usePush';
+
+const router = useRouter();
+const { success: toastSuccess, error: toastError } = useToast();
+const { isSupported: pushSupported, isSubscribed: pushSubscribed, loading: pushLoading, subscribe: pushSubscribe, checkSubscription } = usePush();
 
 const loading = ref(true);
 const savingInterests = ref(false);
 const savingPrefs = ref(false);
+const savingSlots = ref(false);
 const profile = ref<any>(null);
 const selectedInterests = ref<string[]>([]);
 const prefGender = ref('any');
 const showPreview = ref(false);
+const photoInput = ref<HTMLInputElement | null>(null);
+const isDarkTheme = ref(false);
+const inputReferralCode = ref('');
+const applyingReferral = ref(false);
+
+const daysConfig = ref([
+  { val: 0, label: 'Пн', active: false, timeFrom: '19:00', timeTo: '22:00' },
+  { val: 1, label: 'Вт', active: false, timeFrom: '19:00', timeTo: '22:00' },
+  { val: 2, label: 'Ср', active: false, timeFrom: '19:00', timeTo: '22:00' },
+  { val: 3, label: 'Чт', active: false, timeFrom: '19:00', timeTo: '22:00' },
+  { val: 4, label: 'Пт', active: false, timeFrom: '19:00', timeTo: '22:00' },
+  { val: 5, label: 'Сб', active: false, timeFrom: '12:00', timeTo: '20:00' },
+  { val: 6, label: 'Вс', active: false, timeFrom: '12:00', timeTo: '20:00' },
+]);
 
 const interestEmojiMap: Record<string, string> = {
   hookah: '💨 Кальян', bar: '🍺 Бар', sport: '⚽ Спорт', movie_theatre: '🎬 Кино',
@@ -166,13 +316,8 @@ const interestEmojiMap: Record<string, string> = {
 };
 function interestLabel(id: string) { return interestEmojiMap[id] ?? id; }
 
-// ── Тосты ─────────────────────────────────────────────────────────────────
-const toast = ref<{ message: string; type: 'success' | 'error' } | null>(null);
-let toastTimer: ReturnType<typeof setTimeout> | null = null;
 function showToast(message: string, type: 'success' | 'error' = 'success') {
-  if (toastTimer) clearTimeout(toastTimer);
-  toast.value = { message, type };
-  toastTimer = setTimeout(() => { toast.value = null; }, 3000);
+  type === 'success' ? toastSuccess(message) : toastError(message);
 }
 
 const repPercent = computed(() => Math.min(100, Math.max(0, ((profile.value?.reputation ?? 0) / 10) * 100)));
@@ -228,7 +373,18 @@ function toggleInterest(id: string) {
   else selectedInterests.value.splice(idx, 1);
 }
 
+function toggleTheme() {
+  if (isDarkTheme.value) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    localStorage.setItem('theme', 'dark');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('theme', 'light');
+  }
+}
+
 async function loadProfile() {
+  isDarkTheme.value = document.documentElement.getAttribute('data-theme') === 'dark';
   const token = localStorage.getItem('token');
   if (!token) return;
   try {
@@ -236,6 +392,16 @@ async function loadProfile() {
     profile.value = await res.json();
     selectedInterests.value = [...(profile.value.interests ?? [])];
     prefGender.value = profile.value.prefGender ?? 'any';
+    if (profile.value.timeSlots) {
+      profile.value.timeSlots.forEach((s: any) => {
+        const d = daysConfig.value.find(day => day.val === s.dayOfWeek);
+        if (d) {
+          d.active = true;
+          d.timeFrom = s.timeFrom;
+          d.timeTo = s.timeTo;
+        }
+      });
+    }
   } finally {
     loading.value = false;
   }
@@ -287,7 +453,158 @@ async function savePreferences() {
   }
 }
 
-onMounted(loadProfile);
+async function saveSlots() {
+  const token = localStorage.getItem('token');
+  if (!token) return;
+  savingSlots.value = true;
+  try {
+    const payload = daysConfig.value
+      .filter(d => d.active)
+      .map(d => ({ dayOfWeek: d.val, timeFrom: d.timeFrom, timeTo: d.timeTo }));
+      
+    const res = await fetch(`${API_URL}/users/slots`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ slots: payload }),
+    });
+    if (res.ok) {
+      showToast('✅ Расписание сохранено');
+    } else {
+      showToast('Ошибка сохранения', 'error');
+    }
+  } catch {
+    showToast('Нет соединения', 'error');
+  } finally {
+    savingSlots.value = false;
+  }
+}
+
+async function deleteAccount() {
+  if (!confirm('Удалить аккаунт безвозвратно?')) return;
+  const token = localStorage.getItem('token');
+  if (!token) return;
+  try {
+    await fetch(`${API_URL}/users/me`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    localStorage.removeItem('token');
+    router.push('/');
+  } catch {
+    showToast('Ошибка удаления', 'error');
+  }
+}
+
+async function uploadPhoto(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+
+  const token = localStorage.getItem('token');
+  if (!token) return;
+
+  const formData = new FormData();
+  formData.append('photo', file);
+
+  showToast('Загрузка фото...', 'success');
+  try {
+    const res = await fetch(`${API_URL}/users/photos`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    if (res.ok) {
+      await loadProfile();
+      showToast('Фото загружено', 'success');
+    } else {
+      showToast('Ошибка загрузки', 'error');
+    }
+  } catch {
+    showToast('Нет соединения', 'error');
+  } finally {
+    if (photoInput.value) photoInput.value.value = '';
+  }
+}
+
+async function deletePhoto(id: number) {
+  if (!confirm('Удалить эту фотографию?')) return;
+  const token = localStorage.getItem('token');
+  if (!token) return;
+
+  try {
+    const res = await fetch(`${API_URL}/users/photos/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      await loadProfile();
+      showToast('Фото удалено', 'success');
+    } else {
+      showToast('Ошибка удаления', 'error');
+    }
+  } catch {
+    showToast('Нет соединения', 'error');
+  }
+}
+
+function copyReferralLink() {
+  const url = `${window.location.origin}/?ref=${profile.value.referralCode}`;
+  navigator.clipboard.writeText(url);
+  toastSuccess('Ссылка скопирована!');
+}
+
+async function applyReferral() {
+  if (!inputReferralCode.value.trim()) return;
+  applyingReferral.value = true;
+  const token = localStorage.getItem('token');
+  try {
+    const res = await fetch(`${API_URL}/users/apply-referral`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ code: inputReferralCode.value.trim() }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Ошибка');
+    toastSuccess('Код успешно применен!');
+    loadProfile(); 
+  } catch (e: any) {
+    toastError(e.message);
+  } finally {
+    applyingReferral.value = false;
+  }
+}
+
+async function togglePush() {
+  if (pushSubscribed.value) {
+    // Отписываемся
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await sub.unsubscribe();
+        const token = localStorage.getItem('token');
+        await fetch(`${API_URL}/users/push-subscription`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        });
+      }
+      pushSubscribed.value = false;
+      toastSuccess('Уведомления отключены');
+    } catch {
+      toastError('Не удалось отключить уведомления');
+    }
+  } else {
+    const ok = await pushSubscribe();
+    if (ok) toastSuccess('Уведомления включены 🔔');
+    else toastError('Не удалось включить уведомления. Проверьте разрешения.');
+  }
+}
+
+onMounted(async () => {
+  await loadProfile();
+  checkSubscription();
+});
 </script>
 
 <style scoped>
@@ -300,9 +617,32 @@ onMounted(loadProfile);
   gap: 14px;
   text-align: center;
 }
-.profile-photo { position: relative; }
-.avatar-img { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; }
-.profile-info { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.photos-gallery { width: 100%; text-align: center; display: flex; flex-direction: column; align-items: center; }
+.photos-scroll { 
+  display: flex; gap: 12px; overflow-x: auto; padding: 4px; scroll-snap-type: x mandatory;
+  width: 100%; max-width: 100%; scrollbar-width: none;
+}
+.photos-scroll::-webkit-scrollbar { display: none; }
+.photo-item { 
+  position: relative; flex-shrink: 0; width: 110px; height: 140px; scroll-snap-align: center; 
+  border-radius: var(--radius); overflow: hidden; background: #eee;
+  box-shadow: var(--shadow-sm);
+}
+.gallery-img { width: 100%; height: 100%; object-fit: cover; }
+.photo-del-btn {
+  position: absolute; top: 4px; right: 4px; width: 24px; height: 24px;
+  background: rgba(255,59,48,0.9); color: #fff; border: none; border-radius: 50%;
+  font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.add-photo-btn {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 2px dashed #EDE8E5; cursor: pointer;
+  color: var(--primary); transition: all 0.2s;
+}
+.add-photo-btn:hover { border-color: var(--primary); background: var(--primary-soft); }
+.plus-icon { font-size: 2.5rem; font-weight: 300; }
+
+.profile-info { display: flex; flex-direction: column; gap: 6px; align-items: center; margin-top: 4px; }
 .profile-info h2 { margin: 0; }
 .profile-meta { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 
@@ -333,6 +673,24 @@ onMounted(loadProfile);
   transition: all 0.15s;
 }
 .gender-btn.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+
+.slots-list { display: flex; flex-direction: column; gap: 8px; }
+.slot-row { display: flex; align-items: center; gap: 12px; }
+.slot-day-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 2px solid #EDE8E5; background: var(--surface);
+  font-weight: 600; font-size: 0.8rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); flex-shrink: 0; transition: all 0.15s;
+}
+.slot-day-btn.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+.slot-times { display: flex; align-items: center; gap: 6px; }
+.slot-time-input { 
+  max-width: 68px; text-align: center; padding: 4px 6px; 
+  font-size: 0.85rem; border: 1px solid #EDE8E5; 
+  border-radius: var(--radius-sm); background: var(--bg);
+}
+.slot-off { flex: 1; text-align: left; opacity: 0.7; }
 
 .s-toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -368,4 +726,19 @@ onMounted(loadProfile);
 .preview-avatar { width: 110px; height: 110px; border-radius: 50%; object-fit: cover; }
 .preview-meta { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 4px; }
 .preview-interests { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 8px; }
+
+/* Switch для темной темы */
+.theme-switch input { display: none; }
+.switch-ui {
+  display: block; width: 44px; height: 24px; background: var(--surface-2); border: 1px solid #EDE8E5;
+  border-radius: 100px; position: relative; cursor: pointer;
+  transition: background 0.3s, border-color 0.3s;
+}
+.switch-ui::after {
+  content: ''; position: absolute; top: 1px; left: 1px;
+  width: 20px; height: 20px; background: #fff; border-radius: 50%;
+  transition: transform 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.theme-switch input:checked + .switch-ui { background: var(--primary); border-color: var(--primary); }
+.theme-switch input:checked + .switch-ui::after { transform: translateX(20px); }
 </style>

@@ -5,6 +5,10 @@
     <header class="app-header">
       <div class="app-header__logo">🌟 Meetup</div>
       <div class="app-header__actions">
+        <div v-if="currentUser?.streakDays > 0" class="badge" style="font-size: 0.85rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 100px; padding: 4px 8px; margin-right: 4px; display: flex; align-items: center;">
+          🔥 <span style="font-weight: bold; margin-left:2px;">{{ currentUser.streakDays }}</span>
+        </div>
+        <button class="icon-btn" :class="{ 'icon-btn--active': showMap }" @click="showMap = !showMap" title="Карта">🗺️</button>
         <button class="icon-btn" @click="showFilters = true" title="Фильтры">🔍</button>
         <button class="icon-btn" @click="$router.push('/history')" title="История">📋</button>
         <button class="icon-btn" @click="$router.push('/settings')" title="Настройки">⚙️</button>
@@ -19,6 +23,9 @@
       <p>Твой аккаунт заблокирован до {{ banDateFormatted }} из-за низкого рейтинга.</p>
       <p class="text-sm">Постарайся не пропускать договорённые встречи — это влияет на рейтинг.</p>
     </div>
+
+    <!-- Карта квестов -->
+    <QuestMap v-else-if="showMap" />
 
     <!-- Основная лента -->
     <template v-else>
@@ -55,6 +62,7 @@
             v-for="(quest, index) in quests"
             :key="quest.id"
             :quest="quest"
+            :ref="(el: any) => { if (el && index === quests.length - 1) questCardRef = el }"
             v-show="index === quests.length - 1"
             @swipeRight="onLike(quest.id)"
             @swipeLeft="onNope(quest.id)"
@@ -76,8 +84,8 @@
 
       <!-- Кнопки под стопкой -->
       <div v-if="quests.length > 0" class="action-btns">
-        <button class="action-btn action-btn--nope" @click="onNope(quests[quests.length - 1]?.id)">✕</button>
-        <button class="action-btn action-btn--like" @click="onLike(quests[quests.length - 1]?.id)">✓</button>
+        <button class="action-btn action-btn--nope" @click="questCardRef?.triggerSwipe('left')">✕</button>
+        <button class="action-btn action-btn--like" @click="questCardRef?.triggerSwipe('right')">✓</button>
       </div>
 
       <!-- Кнопка отмены свайпа -->
@@ -101,15 +109,6 @@
           </div>
         </div>
       </div>
-    </Teleport>
-
-    <!-- Тост-уведомления -->
-    <Teleport to="body">
-      <Transition name="toast">
-        <div v-if="toast" :class="['toast-msg', `toast-msg--${toast.type}`]">
-          {{ toast.message }}
-        </div>
-      </Transition>
     </Teleport>
 
     <!-- Фильтры (дровер) -->
@@ -148,11 +147,13 @@
           </div>
 
           <div class="field-group">
-            <label class="input-label">Возраст: {{ filters.ageMin }}–{{ filters.ageMax }} лет</label>
-            <div class="age-range-row">
-              <input type="range" min="16" max="60" v-model.number="filters.ageMin" class="age-slider" />
-              <input type="range" min="16" max="60" v-model.number="filters.ageMax" class="age-slider" />
-            </div>
+            <DualRangeSlider
+              :min="16"
+              :max="60"
+              label="Возраст"
+              v-model:modelValueMin="filters.ageMin"
+              v-model:modelValueMax="filters.ageMax"
+            />
           </div>
 
           <div class="field-group">
@@ -179,6 +180,11 @@ import { io, Socket } from 'socket.io-client';
 import { API_URL } from '../config';
 import { track } from '../analytics';
 import QuestCard from './QuestCard.vue';
+import DualRangeSlider from './DualRangeSlider.vue';
+import QuestMap from './QuestMap.vue';
+import { useToast } from '../composables/useToast';
+
+const { error: toastError } = useToast();
 
 const router = useRouter();
 const quests = ref<any[]>([]);
@@ -186,6 +192,9 @@ const loading = ref(true);
 const isBanned = ref(false);
 const banDateFormatted = ref('');
 const showFilters = ref(false);
+const showMap = ref(false);
+const currentUser = ref<any>(null);
+const questCardRef = ref<InstanceType<typeof QuestCard> | null>(null);
 
 const filters = ref({ prefGender: 'any', ageMin: 16, ageMax: 60, category: 'all', todayOnly: false });
 
@@ -218,13 +227,8 @@ function undoSwipe() {
   track('swipe_undo');
 }
 
-// ── Тосты ──────────────────────────────────────────────────────────────────
-const toast = ref<{ message: string; type: 'error' | 'success' } | null>(null);
-let toastTimer: ReturnType<typeof setTimeout> | null = null;
-function showToast(message: string, type: 'error' | 'success' = 'error') {
-  if (toastTimer) clearTimeout(toastTimer);
-  toast.value = { message, type };
-  toastTimer = setTimeout(() => { toast.value = null; }, 3500);
+function showToast(message: string, _type: string = 'error') {
+  toastError(message);
 }
 const prefGenderOptions = [
   { value: 'any', emoji: '🌟', label: 'Любой' },
@@ -246,19 +250,24 @@ async function loadQuests() {
   if (!token) { router.push('/'); return; }
 
   try {
-    const params = new URLSearchParams({
-      prefGender: filters.value.prefGender,
-      ageMin: String(filters.value.ageMin),
-      ageMax: String(filters.value.ageMax),
-      ...(filters.value.category !== 'all' ? { category: filters.value.category } : {}),
-      ...(filters.value.todayOnly ? { todayOnly: 'true' } : {}),
-    });
-    const res = await fetch(`${API_URL}/quests/feed?${params}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    // Параллельно грузим квесты и профиль для получения актуального стрика
+    const [questsRes, profileRes] = await Promise.all([
+      fetch(`${API_URL}/quests/feed?${new URLSearchParams({
+        prefGender: filters.value.prefGender,
+        ageMin: String(filters.value.ageMin),
+        ageMax: String(filters.value.ageMax),
+        ...(filters.value.category !== 'all' ? { category: filters.value.category } : {}),
+        ...(filters.value.todayOnly ? { todayOnly: 'true' } : {}),
+      })}`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_URL}/users/me`, { headers: { Authorization: `Bearer ${token}` } })
+    ]);
 
-    if (res.status === 403) {
-      const data = await res.json();
+    if (profileRes.ok) {
+      currentUser.value = await profileRes.json();
+    }
+
+    if (questsRes.status === 403) {
+      const data = await questsRes.json();
       isBanned.value = true;
       const match = data.message?.match(/\d{4}-\d{2}-\d{2}/);
       banDateFormatted.value = match
@@ -267,7 +276,7 @@ async function loadQuests() {
       return;
     }
 
-    const data = await res.json();
+    const data = await questsRes.json();
     quests.value = data;
     track('feed_load', { count: data.length });
   } catch {
@@ -284,8 +293,10 @@ async function onLike(questId: string) {
   const token = localStorage.getItem('token');
   if (!token) return;
 
-  // Оптимистично убираем карточку из стека
-  quests.value = quests.value.filter(q => q.id !== questId);
+  // Убираем карточку из стека с задержкой, чтобы анимация улёта успела доиграть
+  setTimeout(() => {
+    quests.value = quests.value.filter(q => q.id !== questId);
+  }, 500);
 
   try {
     const res = await fetch(`${API_URL}/quests/swipe`, {
@@ -317,7 +328,10 @@ function onNope(questId: string) {
   if (!questId) return;
   track('swipe_nope', { questId });
   const quest = quests.value.find(q => q.id === questId);
-  quests.value = quests.value.filter(q => q.id !== questId);
+  // Задержка для анимации улёта
+  setTimeout(() => {
+    quests.value = quests.value.filter(q => q.id !== questId);
+  }, 500);
   if (quest) {
     lastNopedQuest.value = quest;
     showUndo.value = true;

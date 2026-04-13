@@ -1,4 +1,4 @@
-import { Controller, Post, Patch, Get, Body, UseGuards, Request, ForbiddenException, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Post, Patch, Get, Delete, Body, Param, UseGuards, Request, ForbiddenException, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -47,6 +47,35 @@ export class UsersController {
     return this.usersService.updateVideo(req.user.id, videoUrl);
   }
 
+  @Post('photos')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      storage: diskStorage({
+        destination: './uploads/photos',
+        filename: (req, file, cb) => {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const ext = extname(file.originalname);
+          cb(null, `${uniqueSuffix}${ext}`);
+        },
+      }),
+    }),
+  )
+  async uploadPhoto(
+    @Request() req: any,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new ForbiddenException('Файл не загружен');
+    const photoUrl = `${process.env.API_URL || 'http://localhost:3000'}/uploads/photos/${file.filename}`;
+    return this.usersService.addPhoto(req.user.id, photoUrl);
+  }
+
+  @Delete('photos/:id')
+  @UseGuards(JwtAuthGuard)
+  async deletePhoto(@Request() req: any, @Param('id') id: string) {
+    return this.usersService.deletePhoto(req.user.id, parseInt(id));
+  }
+
   @Post('interests')
   @UseGuards(JwtAuthGuard)
   async setInterests(@Request() req: any, @Body() data: UpdateInterestsDto) {
@@ -57,6 +86,48 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   async setSlots(@Request() req: any, @Body() data: UpdateSlotsDto) {
     return this.usersService.updateSlots(req.user.id, data.slots);
+  }
+
+  @Delete('me')
+  @UseGuards(JwtAuthGuard)
+  async deleteAccount(@Request() req: any) {
+    return this.usersService.deleteAccount(req.user.id);
+  }
+
+  @Post(':id/report')
+  @UseGuards(JwtAuthGuard)
+  async reportUser(
+    @Request() req: any,
+    @Param('id') reportedId: string,
+    @Body('reason') reason: string,
+  ) {
+    if (!reason) throw new ForbiddenException('Причина не указана');
+    return this.usersService.reportUser(req.user.id, parseInt(reportedId), reason);
+  }
+
+  @Post(':id/block')
+  @UseGuards(JwtAuthGuard)
+  async blockUser(@Request() req: any, @Param('id') blockedId: string) {
+    return this.usersService.blockUser(req.user.id, parseInt(blockedId));
+  }
+
+  @Post('referral/apply')
+  @UseGuards(JwtAuthGuard)
+  async applyReferral(@Request() req: any, @Body('code') code: string) {
+    if (!code) throw new ForbiddenException('Код не указан');
+    return this.usersService.applyReferralCode(req.user.id, code);
+  }
+
+  @Post('push-subscription')
+  @UseGuards(JwtAuthGuard)
+  async savePushSub(@Request() req: any, @Body() body: any) {
+    return this.usersService.savePushSubscription(req.user.id, body);
+  }
+
+  @Delete('push-subscription')
+  @UseGuards(JwtAuthGuard)
+  async deletePushSub(@Request() req: any, @Body() body: { endpoint: string }) {
+    return this.usersService.deletePushSubscription(req.user.id, body.endpoint);
   }
 
   @Post('test-login')

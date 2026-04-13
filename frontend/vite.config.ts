@@ -5,7 +5,11 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   server: {
-    host: '127.0.0.1', // Разрешаем доступ по этому IP
+    host: '127.0.0.1',
     port: 80,
+  },
+  build: {
+    // Source maps для Sentry (можно отключить если не нужны)
+    sourcemap: true,
   }
 })

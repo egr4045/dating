@@ -37,24 +37,93 @@ model User {
   // Счётчик гостингов
   ghostCount      Int      @default(0)
 
+  // Опыт и Стрики
+  xp              Int      @default(0)
+  streakDays      Int      @default(0)
+  maxStreak       Int      @default(0)
+  lastActiveAt    DateTime @default(now())
+
+  // Реферальная система
+  referralCode    String?  @unique @default(cuid())
+  referredById    Int?
+  referredBy      User?    @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals       User[]   @relation("UserReferrals")
+
   hostedLobbies   QuestLobby[]  @relation("Host")
   joinedLobbies   QuestLobby[]  @relation("Participant")
   timeSlots       TimeSlot[]
+  photos          UserPhoto[]
+  reportsSent     Report[]      @relation("ReportedBy")
+  reportsReceived Report[]      @relation("ReportTarget")
+  blocksGiven     Block[]       @relation("Blocker")
+  blocksReceived  Block[]       @relation("BlockedUser")
+  reviewsGiven    MatchReview[] @relation("ReviewsGiven")
+  reviewsReceived MatchReview[] @relation("ReviewsReceived")
+  achievements      UserAchievement[]
+  reactionsGiven    MessageReaction[]
+  pushSubscriptions PushSubscription[]
+  
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
 
+model Report {
+  id          Int      @id @default(autoincrement())
+  reporterId  Int
+  reporter    User     @relation("ReportedBy", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedId  Int
+  reported    User     @relation("ReportTarget", fields: [reportedId], references: [id], onDelete: Cascade)
+  reason      String
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+
+  @@index([reporterId])
+  @@index([reportedId])
+}
+
+model Block {
+  id          Int      @id @default(autoincrement())
+  blockerId   Int
+  blocker     User     @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId   Int
+  blocked     User     @relation("BlockedUser", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+}
+
+model UserPhoto {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url       String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
 model QuestTemplate {
-  id          String   @id
-  title       String
-  description String
-  category    String   // "games", "offline", "online"
-  subcategory String
-  lobbies     QuestLobby[]
-  imageUrl    String?
-  address     String?  // Адрес места события
-  price       String?  // "~500₽/чел", "бесплатно"
-  paymentRule String   @default("50/50")
+  id           String   @id
+  title        String
+  description  String
+  category     String   // "games", "offline", "online"
+  subcategory  String
+  lobbies      QuestLobby[]
+  imageUrl     String?
+  address      String?  // Адрес места события
+  price        String?  // "~500₽/чел", "бесплатно"
+  paymentRule  String   @default("50/50")
+
+  // Геолокация (для карты)
+  lat          Float?
+  lon          Float?
+
+  // Партнёрские квесты
+  sponsored    Boolean  @default(false)
+  sponsorName  String?
+  sponsorLogo  String?
+  sponsorBudget Int     @default(0)
 }
 
 model QuestLobby {
@@ -83,6 +152,7 @@ model QuestLobby {
   
   createdAt             DateTime      @default(now())
   messages              Message[]
+  reviews               MatchReview[]
 
   @@index([hostId])
   @@index([participantId])
@@ -96,6 +166,7 @@ model Message {
   text      String
   createdAt DateTime   @default(now())
   match     QuestLobby @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  reactions MessageReaction[]
 
   @@index([matchId])
   @@index([senderId])
@@ -137,4 +208,61 @@ model LoginSession {
 
   @@index([token])
   @@index([expiresAt])
+}
+
+model AppConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model MatchReview {
+  id         Int        @id @default(autoincrement())
+  matchId    Int
+  match      QuestLobby @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  reviewerId Int
+  reviewer   User       @relation("ReviewsGiven", fields: [reviewerId], references: [id], onDelete: Cascade)
+  targetId   Int
+  target     User       @relation("ReviewsReceived", fields: [targetId], references: [id], onDelete: Cascade)
+  rating     Int
+  comment    String?
+  createdAt  DateTime   @default(now())
+
+  @@unique([matchId, reviewerId])
+  @@index([targetId])
+}
+
+model UserAchievement {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badgeId     String   // строка-идентификатор ("FIRST_MATCH")
+  grantedAt   DateTime @default(now())
+
+  @@unique([userId, badgeId])
+}
+
+model MessageReaction {
+  id        Int      @id @default(autoincrement())
+  messageId Int
+  userId    Int
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+}
+
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }

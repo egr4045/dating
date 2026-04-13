@@ -1,315 +1,239 @@
-# Dating App — Глобальный план улучшений
+# Roadmap роста приложения
 
-_Сформирован: 2026-04-11 | Основан на полном аудите кодовой базы_
+_Обновлён: 2026-04-12_
 
-Файлы затронуты: `frontend/src/components/`, `backend/src/`, `backend/prisma/schema.prisma`
+## Стек
+- **Frontend:** Vue 3 + Vite + InteractJS + Socket.io-client (браузерное приложение)
+- **Backend:** NestJS 11 + Prisma + PostgreSQL + Socket.io + Telegraf
+- **Auth:** Telegram OAuth (JWT 7d)
+- **Real-time:** Socket.io (chat, matches, typing)
+- **Notifications:** Telegram Bot + Web Push API для браузера (планируется)
 
----
-
-## 🔴 БЛОК 1 — Критические баги (ломают продакшн прямо сейчас)
-
-### 1.1 Рейс-кондишн при создании матча
-**Файл:** `backend/src/quests/quests.service.ts` ~строки 64–110  
-Два пользователя одновременно свайпают один и тот же квест. Оба проходят проверку на активный матч, оба пишут в БД. Один побеждает, второй думает что всё ок, но матч не создан — "призрачный матч".  
-**Фикс:** обернуть `findFirst` + `updateMany` + создание матча в `prisma.$transaction`.
-
-### 1.2 Карточка удаляется до ответа сервера
-**Файл:** `frontend/src/components/Dashboard.vue` строки 161–183  
-В `onLike()` карточка убирается из UI на строке 164, потом идёт запрос. Если API упал — карточка пропала навсегда, матч не создан, пользователь не знает.  
-**Фикс:** убирать карточку только после `res.ok`, при ошибке показывать тост и возвращать карточку.
-
-### 1.3 JWT никогда не истекает
-**Файл:** `backend/src/auth/auth.service.ts` строка ~56  
-`jwtService.sign()` без `expiresIn` — токен вечный. Украденный токен работает всегда.  
-**Фикс:** добавить `expiresIn: '7d'` (или `'30d'` с refresh-токеном).
-
-### 1.4 JWT_SECRET — хардкод-фолбэк
-**Файлы:** `auth/jwt-auth.guard.ts`, `chat/chat.module.ts`, `chat/chat.gateway.ts`  
-`process.env.JWT_SECRET || 'SUPER_SECRET_KEY'` — если переменная не выставлена в проде, приложение молча работает с публичным секретом. Любой может подделать токен.  
-**Фикс:** в `main.ts` при старте: `if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET not set')`.
-
-### 1.5 test-login работает не только в development
-**Файл:** `backend/src/users/users.controller.ts` строки 42–48  
-Проверка `=== 'production'` — если `NODE_ENV` не выставлен (CI, staging), эндпоинт открыт. Любой может создать аккаунт без Telegram.  
-**Фикс:** `if (process.env.ALLOW_TEST_LOGIN !== 'true') throw new ForbiddenException(...)`.
-
-### 1.6 Репутация уходит в минус без ограничения
-**Файл:** `backend/src/quests/quests.service.ts` строки 250–261  
-`reputation += -1.0` без нижней границы. Можно уйти в -100. Логика банов ломается.  
-**Фикс:** `Math.max(0, reputation + delta)`, хранить как `Decimal` вместо `Float`.
+## Что уже работает хорошо
+- Telegram OAuth + JWT
+- Свайп + матчинг (атомарные транзакции)
+- Планировщик встреч (PENDING → PROPOSED → CONFIRMED)
+- Чат (typing, read receipts на сервере)
+- Репутация (автобан < 2.0)
+- Полноценная админка
+- 4-tier алгоритм подбора квестов
 
 ---
 
-## 🟠 БЛОК 2 — Безопасность
+# ПРИОРИТЕТ 1 — Срочно (блокирующие проблемы)
 
-### 2.1 XSS в сообщениях чата
-**Файл:** `backend/src/chat/chat.gateway.ts` строки 74–96  
-Текст сообщения не санируется, сохраняется as-is и рассылается через сокет. Можно вставить HTML/JS.  
-**Фикс:** `npm install xss` + прогонять `data.text` через `xss()` перед сохранением + ограничить длину 1000 символов.
+## 1.1 XSS в чате
+**Файл:** `backend/src/chat/chat.gateway.ts`  
+Добавить sanitize перед сохранением: `text = text.replace(/<[^>]*>/g, '').trim()`
 
-### 2.2 CORS слишком широкий
-**Файл:** `backend/src/main.ts` строки 19–44  
-Разрешает `192.168.*.*` (вся локальная сеть) и запросы без `Origin` (curl, мобильные приложения).  
-**Фикс:** оставить только `localhost` + `process.env.FRONTEND_URL`. Если `FRONTEND_URL` не выставлен — бросить ошибку при старте.
+## 1.2 Preferences не применяются в фиде
+**Файл:** `backend/src/quests/quests.service.ts`  
+`prefGender`, `prefAgeMin`, `prefAgeMax` хранятся но **не используются** при фильтрации.  
+**Фикс:** При выборке WAITING лобби — JOIN на host user, проверять age + gender хоста.
 
-### 2.3 Socket.io CORS — хардкод портов
-**Файл:** `backend/src/chat/chat.gateway.ts` строки 6–20  
-`'http://127.0.0.1'` (без порта!) матчит любой порт. Origin-список хардкодный.  
-**Фикс:** использовать ту же CORS-функцию что и в `main.ts`.
+## 1.3 Нет тостов об ошибках
+**Создать:** `frontend/src/composables/useToast.ts` (глобальный event bus)  
+**Создать:** `frontend/src/components/ToastContainer.vue`  
+**Добавить в** `App.vue`  
+Вызывать во всех catch-блоках во всех компонентах.
 
-### 2.4 Роутер не валидирует admin-токен на сервере
-**Файл:** `frontend/src/router.ts` строка ~68  
-`if (adminToken)` — просто проверяет наличие строки в localStorage. Невалидный/истёкший токен пропускается.  
-**Фикс:** при входе в admin-раздел делать `GET /admin/me` и редиректить на `/admin/login` при 401.
-
-### 2.5 Сессии авторизации в памяти — нет лимита
-**Файл:** `backend/src/auth/auth.service.ts` строки 82–89  
-`loginSessions` — `Map` в памяти, очистка через `setTimeout`. При рестарте всё теряется, при флуде — OOM.  
-**Фикс:** хранить сессии в Redis или PostgreSQL с TTL, добавить rate limiting на эндпоинт.
+## 1.4 Настройки — пропущенные разделы
+- **Слоты доступности** (TimeSlots) — модель есть, API есть, UI в Settings.vue **отсутствует**
+- **Удаление аккаунта** — добавить кнопку + `DELETE /users/me` endpoint
 
 ---
 
-## 🟡 БЛОК 3 — Данные и логика
+# ПРИОРИТЕТ 2 — Качество продукта
 
-### 3.1 Каскадное удаление не настроено в схеме
-**Файл:** `backend/prisma/schema.prisma` строки 39–40, 87–93  
-При удалении пользователя его лобби/сообщения остаются висеть как сироты. В `admin.service.ts` есть ручная очистка, но она неполная.  
-**Фикс:** добавить `onDelete: Cascade` на все FK в `QuestLobby` и `Message`.
+## 2.1 Несколько фотографий профиля
+**Схема:** Новая модель `UserPhoto` (`id`, `userId`, `url`, `order`, `createdAt`)  
+**Бэкенд:** `POST /users/photos`, `DELETE /users/photos/:id`, `PATCH /users/photos/reorder`  
+**Фронтенд:** Карусель в Settings.vue + карусель в ActiveMatch.vue у партнёра
 
-### 3.2 Отсутствуют индексы на FK и часто используемых полях
-**Файл:** `backend/prisma/schema.prisma`  
-`hostId`, `participantId`, `templateId`, `matchId` (в Message), `status + createdAt` (в QuestLobby) — нет индексов. Крон-джоб раз в 5 минут делает full table scan.  
-**Фикс:**
-```prisma
-// QuestLobby
-@@index([hostId])
-@@index([participantId])
-@@index([status, createdAt])
-
-// Message
-@@index([matchId])
-@@index([senderId])
-
-// AnalyticsEvent
-@@index([userId, createdAt])
-@@index([event, createdAt])
+## 2.2 Рабочие фильтры фида
 ```
+GET /quests/feed?category=offline&ageMin=20&ageMax=35&gender=female&todayOnly=true
+```
+Применять при JOIN на host user в `quests.service.ts`.  
+Передавать все фильтры из Dashboard.vue в query params.
 
-### 3.3 Репутация обновляется без транзакции
-**Файл:** `backend/src/quests/quests.service.ts` строки 240–272  
-Два `update` подряд на двух пользователях без транзакции. Если первый прошёл, второй упал — состояние несогласованное.  
-**Фикс:** `prisma.$transaction([...])` для обоих апдейтов.
+## 2.3 Блокировка и жалобы
+**Схема:** `UserBlock` (`blockerId`, `blockedId`), `Report` (`reporterId`, `targetId`, `reason`, `text`, `status`)  
+**API:** `POST /users/block/:id`, `POST /users/report/:id`  
+**Логика:** Исключать заблокированных из фида  
+**UI:** Кнопки в ActiveMatch.vue (меню партнёра)  
+**Админка:** Раздел «Жалобы» с action buttons
 
-### 3.4 Дата встречи не валидируется
-**Файл:** `backend/src/quests/quests.controller.ts` строки 72, 83  
-`new Date(body.proposedDate)` без проверки: можно передать `"banana"` или дату в прошлом.  
-**Фикс:** DTO-валидатор `@IsISO8601()` + `@MinDate(new Date())` через `class-validator`.
+## 2.4 Тёмная тема
+CSS-переменные уже есть. Добавить `[data-theme="dark"]` в `main.css`. Переключатель в Settings.vue.
 
-### 3.5 Уведомления дублируются (рейс-кондишн)
-**Файл:** `backend/src/notifications/notifications.service.ts` строки 25–56  
-Два параллельных крон-запуска: оба читают `hostNotifiedAt`, оба видят `null`, оба шлют пуш, потом оба пишут.  
-**Фикс:** `prisma.$transaction` с `updateMany` + проверкой — если `count === 0`, значит другой процесс уже обработал.
-
-### 3.6 Сообщения чата загружаются все сразу (нет пагинации)
-**Файл:** `backend/src/quests/quests.service.ts` строки 219–228  
-`include: { messages: { orderBy: ... } }` без `take`. Матч с 5000 сообщений = 5000 строк в памяти.  
-**Фикс:** `take: 50, orderBy: { createdAt: 'desc' }` + пагинация через курсор на фронте.
-
-### 3.7 `confirmSlot` — мёртвый параметр `selectedSlot`
-**Файл:** `backend/src/quests/quests.controller.ts` строка 30  
-`body.selectedSlot` передаётся в сервис, но там игнорируется.  
-**Фикс:** убрать из DTO или реально использовать.
+## 2.5 Верификация профиля
+`profileVerified: Boolean` в User. Отметка в админке. ✅ бейдж у верифицированных.
 
 ---
 
-## 🔵 БЛОК 4 — UX: ошибки и фидбек (нет ни в одном месте)
+# ПРИОРИТЕТ 3 — Удержание (ретеншн)
 
-### 4.1 Нет обработки ошибок в SchedulingScreen
-**Файл:** `frontend/src/components/SchedulingScreen.vue`  
-`proposeDate()` и `confirmDate()` не проверяют `res.ok`. Ошибка API = молчание, UI завис.  
-**Фикс:** показывать тост с ошибкой, не менять локальный статус если сервер вернул ошибку.
+## 3.1 Геймификация: Достижения + Стрики + Уровни
 
-### 4.2 Нет фидбека в Settings при сохранении
-**Файл:** `frontend/src/components/Settings.vue`  
-Кнопки "Сохранить" не дают никакого визуального ответа. Сохранилось или нет — непонятно.  
-**Фикс:** тост "Сохранено ✓" + `disabled` + спиннер на кнопке во время запроса.
+### Достижения (видны другим пользователям!)
+**Схема:** `Achievement` (`userId`, `type` enum, `unlockedAt`)
 
-### 4.3 Сообщение очищается до подтверждения отправки
-**Файл:** `frontend/src/components/ActiveMatch.vue` строка ~187  
-`messageText.value = ''` до `await send()`. Если сеть упала — сообщение потеряно.  
-**Фикс:** очищать input только после `res.ok`, показывать ошибку при неудаче.
+| Ачивка | Условие |
+|--------|---------|
+| 🥇 `FIRST_MATCH` | Первый матч |
+| 🔥 `STREAK_3` | 3 встречи подряд |
+| 🔥 `STREAK_5` | 5 подряд |
+| 🏆 `BEST_STREAK` | Новый личный рекорд стрика |
+| 💎 `VERIFIED` | Верифицирован |
+| 🌟 `REPUTATION_8` | Репутация > 8 |
+| 🎯 `MATCHMAKER_10` | 10 завершённых встреч |
+| 🎯 `MATCHMAKER_25` | 25 встреч |
+| 🎯 `MATCHMAKER_50` | 50 встреч (Легенда) |
 
-### 4.4 Выход из аккаунта без подтверждения
-**Файл:** `frontend/src/components/Dashboard.vue` строки 196–200  
-Одно нажатие — сессия удалена. Никакого диалога.  
-**Фикс:** модальное подтверждение "Выйти из аккаунта?".
+**UI:**
+- Settings.vue → «Мои достижения» + заблокированные (мотивация)
+- ActiveMatch.vue → бейджи партнёра под именем
+- History.vue → уведомление о новом бейдже
 
-### 4.5 Завершение матча без подтверждения
-**Файл:** `frontend/src/components/ActiveMatch.vue` строки ~202–203  
-"Всё прошло!" / "Сорвалось" — необратимые действия без confirm-диалога.  
-**Фикс:** модальное окно "Вы уверены? Это действие нельзя отменить".
+### Стрики
+`currentStreak Int @default(0)`, `bestStreak Int @default(0)` в User.  
+streak++ при COMPLETED (в течение 14 дней), streak=0 при FAILED.
 
-### 4.6 Админка: нет тостов после действий
-**Файл:** `frontend/src/components/admin/AdminUserDetail.vue`  
-Бан / разбан / верификация — тихие операции. Непонятно, сработало ли.  
-**Фикс:** тост/снекбар "Пользователь забанен" / "Верификация применена".
-
-### 4.7 Ошибки загрузки = пустой экран
-**Файлы:** `ActiveMatch.vue`, `Settings.vue`, `History.vue`  
-Если API падает, пользователь видит пустоту или `undefined`. Нет кнопки "Попробовать снова".  
-**Фикс:** компонент `ErrorState.vue` с кнопкой retry, использовать везде где есть `loadXxx()`.
+### Уровни пользователя (по числу матчей)
+🌱 Новичок → ⭐ Активный → 🔥 Надёжный → 💎 Эксперт → 👑 Легенда
 
 ---
 
-## 🔵 БЛОК 5 — UX: недостающие базовые фичи
+## 3.2 Взаимная оценка после встречи
 
-### 5.1 Undo последнего свайпа
-Стандарт для всех swipe-приложений. Убрал карточку — можно вернуть.  
-**Реализация:** хранить последний `noped` квест в `ref`, показывать кнопку "↩ Вернуть" 3 секунды.
+После COMPLETED → экран оценки (1–5 ⭐ + комментарий).  
+**Схема:** `MatchReview` (`matchId`, `reviewerId`, `targetId`, `rating Int`, `comment?`)
 
-### 5.2 Pull-to-refresh в ленте
-На мобиле это ожидаемое поведение.  
-**Реализация:** `touch`-события на `cards-area`, при тяге вниз > 60px запускать `loadQuests()`.
-
-### 5.3 Индикатор набора текста в чате
-**Реализация:** `socket.emit('typing', matchId)` при фокусе на инпуте, слушать `partnerTyping` и показывать "Печатает...".
-
-### 5.4 Read receipts (галочки прочтения)
-Сокет `markAsRead` уже есть, но в UI не отображается.  
-**Реализация:** серые/зелёные галочки на сообщениях по событию `messageRead`.
-
-### 5.5 Предпросмотр своего профиля
-Пользователь не видит как выглядит его карточка для других.  
-**Реализация:** кнопка "Как меня видят" в Settings → рендер `QuestCard`-подобного превью.
-
-### 5.6 Расширенные фильтры ленты
-Сейчас: только пол и возраст. Нужны:
-- Категория события (активности / игры / онлайн)
-- Дата проведения (сегодня / на этой неделе / любая)
-- Цена (бесплатно / до N руб.)
-
-### 5.7 Skeleton loaders вместо пустого экрана
-**Файлы:** все основные компоненты  
-Сейчас при загрузке — либо спиннер-эмодзи, либо ничего.  
-**Реализация:** CSS-анимированные shimmer-заглушки (карточки, список истории, профиль).
-
-### 5.8 Сохранение прогресса онбординга
-Пользователь закрыл на шаге 4 — при возврате начинает с нуля.  
-**Реализация:** сохранять `onboardingState` в `localStorage` на каждом шаге, восстанавливать при монтировании.
-
-### 5.9 Фильтрация/сортировка в истории
-Сейчас история — единый хронологический список без фильтров.  
-**Реализация:** табы "Все / Завершённые / Отменённые", сортировка по дате.
-
-### 5.10 Тёмная тема
-Базовые CSS-переменные для dark mode + переключатель в Settings.
+**Математика репутации — настраивается в админке:**  
+Таблица `AppConfig` (`key String @id`, `value String`, `updatedAt`):
+- `repCompletedBonus` — бонус за матч (default: 0.5)
+- `repFailedPenalty` — штраф (default: 1.0)
+- `repBanThreshold` — порог бана (default: 2.0)
+- `repBanDays` — срок бана в днях (default: 30)
+- Рейтинг оценки пропорционально влияет на бонус
 
 ---
 
-## ⚙️ БЛОК 6 — Архитектура и технический долг
+## 3.3 Push-уведомления (Web Push API)
 
-### 6.1 Нет API-слоя — `fetch` разбросан по компонентам
-Каждый компонент сам строит `fetch` с заголовками. Изменение базового URL или токена = правка 10 файлов.  
-**Фикс:** создать `frontend/src/api.ts` — обёртка с автоматической подстановкой токена и базовым error handling.
-
-### 6.2 Нет TypeScript-типов для API-ответов
-Везде `any`. Ошибки в структуре ответа = молчаливые баги в рантайме.  
-**Фикс:** `frontend/src/types/api.ts` — интерфейсы `User`, `Match`, `Quest`, `Message` и т.д.
-
-### 6.3 Константы размазаны по файлам
-Список интересов, варианты пола, форматы дат — продублированы в `Onboarding.vue`, `Dashboard.vue`, `Settings.vue`.  
-**Фикс:** `frontend/src/constants.ts` — один источник правды.
-
-### 6.4 Нет composables для переиспользуемой логики
-Одинаковая логика токена, форматирования дат, работы с сокетом — в каждом компоненте своя копия.  
-**Фикс:** `useAuth()`, `useSocket()`, `useFormatDate()` в `frontend/src/composables/`.
-
-### 6.5 Нет graceful shutdown на бэкенде
-**Файл:** `backend/src/main.ts`  
-При рестарте сервера активные WS-соединения рвутся без предупреждения.  
-**Фикс:** `app.enableShutdownHooks()` + обработчик `SIGTERM` для закрытия сокетов.
-
-### 6.6 Нет структурированного логирования
-`console.log/error` везде. В проде невозможно агрегировать ошибки.  
-**Фикс:** NestJS встроенный `Logger` с уровнями + опционально Pino/Winston для JSON-логов.
-
-### 6.7 Нет retry-логики для Telegram-уведомлений
-Если Telegram API недоступен — пуш теряется без следа.  
-**Фикс:** очередь повторных попыток (простой массив + крон, или Bull Queue).
+**Бэкенд:** `web-push` npm, VAPID ключи в .env, модель `PushSubscription`  
+**Фронтенд:** `public/sw.js`, `composables/usePushNotifications.ts`  
+Запрашивать разрешение после первого матча (не спамить сразу).
 
 ---
 
-## 📋 Приоритизированный план спринтов
+## 3.4 Реакции в чате
 
-### Спринт 1 — "Не сломать продакшн" (1–2 дня)
-| # | Задача | Файлы |
-|---|--------|-------|
-| 1 | JWT_SECRET — валидация при старте, добавить `expiresIn` | `main.ts`, `auth.service.ts` |
-| 2 | `test-login` — использовать `ALLOW_TEST_LOGIN` env | `users.controller.ts` |
-| 3 | Транзакция в создании матча | `quests.service.ts` |
-| 4 | Транзакция в обновлении репутации | `quests.service.ts` |
-| 5 | Клamp репутации в `[0, ∞)` | `quests.service.ts` |
-| 6 | XSS: санитизация текста сообщений | `chat.gateway.ts` |
-| 7 | Индексы в схеме БД | `schema.prisma` |
-
-### Спринт 2 — "Данные наконец правильные" (2–3 дня)
-| # | Задача | Файлы |
-|---|--------|-------|
-| 1 | Каскадное удаление FK | `schema.prisma` |
-| 2 | Валидация дат встреч (`class-validator`) | `quests.controller.ts` |
-| 3 | Пагинация сообщений (take: 50) | `quests.service.ts` |
-| 4 | Дедупликация уведомлений (транзакция) | `notifications.service.ts` |
-| 5 | CORS — убрать `192.168.*`, требовать `FRONTEND_URL` | `main.ts` |
-| 6 | Dashboard: убирать карточку только после `res.ok` | `Dashboard.vue` |
-| 7 | SchedulingScreen: обработка ошибок API | `SchedulingScreen.vue` |
-
-### Спринт 3 — "UX не стыдно показать" (3–4 дня)
-| # | Задача | Файлы |
-|---|--------|-------|
-| 1 | Тосты/снекбары для всех API-операций | все компоненты |
-| 2 | Confirm-диалоги: выход, завершение матча, удаление акка | `Dashboard.vue`, `ActiveMatch.vue`, `AdminUserDetail.vue` |
-| 3 | ErrorState-компонент + retry кнопки | новый компонент |
-| 4 | Skeleton loaders | все основные страницы |
-| 5 | Сохранение прогресса онбординга | `Onboarding.vue` |
-| 6 | Settings: feedback при сохранении | `Settings.vue` |
-| 7 | Валидация роутера: проверка admin-токена на сервере | `router.ts` |
-
-### Спринт 4 — "Новые фичи" (1 неделя)
-| # | Задача |
-|---|--------|
-| 1 | Undo последнего свайпа |
-| 2 | Расширенные фильтры ленты (категория, дата, цена) |
-| 3 | Индикатор набора текста в чате |
-| 4 | Read receipts (галочки) |
-| 5 | Pull-to-refresh |
-| 6 | Предпросмотр своего профиля в Settings |
-| 7 | Фильтры и табы в истории |
-
-### Спринт 5 — "Архитектура" (1 неделя)
-| # | Задача |
-|---|--------|
-| 1 | API-слой `api.ts` — убрать `fetch` из компонентов |
-| 2 | TypeScript-типы для всех API-ответов |
-| 3 | `constants.ts` — интересы, пол, форматы |
-| 4 | Composables: `useAuth`, `useSocket`, `useFormatDate` |
-| 5 | Структурированное логирование на бэкенде |
-| 6 | Graceful shutdown |
-| 7 | Retry-очередь для Telegram-уведомлений |
+Лонг-тап по сообщению → 6 эмодзи (❤️ 😂 👍 🔥 😮 😢)  
+**Схема:** `MessageReaction` (`messageId`, `userId`, `emoji`)  
+WebSocket: `addReaction` / `removeReaction`
 
 ---
 
-## Статистика находок
+# ПРИОРИТЕТ 4 — Привлечение пользователей
 
-| Категория | Критических | Высоких | Средних | Низких |
-|-----------|-------------|---------|---------|--------|
-| Безопасность | 2 | 3 | 3 | 1 |
-| Данные/Логика | 1 | 4 | 4 | 2 |
-| UX/Фидбек | — | 3 | 5 | 4 |
-| Производительность | — | 1 | 3 | 1 |
-| Архитектура | — | — | 4 | 3 |
-| **Итого** | **3** | **11** | **19** | **11** |
+## 4.1 Реферальная система
+`referralCode String? @unique` + `referredById Int?` в User.  
+Реферер +0.3 к репутации при первом матче реферала.  
+UI в Settings.vue с кнопкой «Поделиться».
+
+## 4.2 Шеринг квестов
+Кнопка «Поделиться» на карточке → URL + Telegram share.  
+Публичная страница `/quest/:id` без авторизации + CTA кнопка.
+
+## 4.3 Карта квестов
+`lat Float?` + `lon Float?` в QuestTemplate.  
+Вкладка «Карта» в Dashboard → Leaflet.js + маркеры + фильтр «Рядом со мной».
 
 ---
 
-_Файл сгенерирован автоматически на основе аудита кодовой базы._
-_Следующий шаг: начать со Спринта 1._
+# ПРИОРИТЕТ 5 — Монетизация
+
+## 5.1 Партнёрские квесты
+Поля в QuestTemplate: `sponsored Boolean`, `sponsorName`, `sponsorBudget Int`, `sponsorLogo`.  
+Каждый 5-й в фиде — спонсорский (при `sponsorBudget > 0`, потом `sponsorBudget--`).  
+Бейдж «Партнёр» на карточке.  
+Раздел «Партнёры» в админке.
+
+---
+
+# ПРИОРИТЕТ 6 — Техническое здоровье
+
+## 6.1 Тесты
+- Unit: матчинг, репутация, дедупликация пушей
+- E2E: регистрация → свайп → матч → оценка → репутация
+
+## 6.2 Логирование (лёгкое)
+- `@nestjs/common Logger` вместо console.log/warn/error
+- `@sentry/vue` для фронтенда (бесплатный tier)
+
+## 6.3 PWA
+- `frontend/public/manifest.json`
+- `frontend/public/sw.js` (cache-first + push handler)
+- `<link rel="manifest">` в index.html
+
+---
+
+# ИТОГОВЫЙ ROADMAP
+
+## Sprint 1 — «Сделать рабочим» (1 неделя)
+- [x] Тосты ошибок (useToast + ToastContainer)
+- [x] Preferences применять в фиде (возраст + пол хоста)
+- [x] Sanitize XSS в чате
+- [x] Слоты доступности в Settings.vue
+- [x] Удаление аккаунта (UI + endpoint)
+- [x] Рабочие фильтры фида (передавать из Dashboard)
+
+## Sprint 2 — «Сделать качественным» (2 неделя)
+- [x] Несколько фотографий профиля
+- [x] Блокировка + жалобы
+- [x] Тёмная тема
+- [x] Верификация профиля (простая отметка)
+- [x] AppConfig в БД + раздел настроек в админке
+
+## Sprint 3 — «Удерживать» (3–4 неделя)
+- [x] Взаимная оценка после встречи + репутация через AppConfig
+- [x] Достижения + бейджи (видны другим пользователям)
+- [x] Стрики + уровни пользователя
+- [x] Реакции в чате
+
+## Sprint 4 — «Растить» (5–6 неделя)
+- [x] Реферальная система
+- [x] Шеринг квестов + публичная страница
+- [x] Push-уведомления (Web Push + Service Worker) — sw.js, usePush.ts, toggle в Settings
+- [x] PWA (manifest + sw.js) — manifest.json, meta-теги, cache-first SW
+
+## Sprint 5 — «Монетизировать» (7–8 неделя)
+- [x] Партнёрские квесты (sponsored + бюджет + раздел в админке) — AdminPartners.vue, каждый 5-й в фиде
+- [x] Карта квестов (Leaflet + геолокация) — QuestMap.vue, GET /quests/map, кнопка 🗺️ в Dashboard
+- [ ] Тесты (unit + e2e)
+- [x] Sentry для фронтенда — @sentry/vue, VITE_SENTRY_DSN, sourcemap
+
+---
+
+## Таблица затрагиваемых файлов
+
+| Sprint | Файл | Изменение |
+|--------|------|-----------|
+| 1 | `frontend/src/composables/useToast.ts` | Создать |
+| 1 | `frontend/src/components/ToastContainer.vue` | Создать |
+| 1 | `backend/src/quests/quests.service.ts` | Применять preferences в getFeed |
+| 1 | `backend/src/chat/chat.gateway.ts` | Sanitize XSS |
+| 1 | `frontend/src/components/Settings.vue` | Слоты + удаление аккаунта |
+| 1 | `backend/src/users/users.controller.ts` | DELETE /users/me |
+| 2 | `backend/prisma/schema.prisma` | UserPhoto, UserBlock, Report, AppConfig |
+| 2 | `backend/src/admin/admin.service.ts` | Чтение/запись AppConfig |
+| 2 | `backend/src/admin/admin.controller.ts` | GET/PUT /admin/config |
+| 3 | `backend/prisma/schema.prisma` | Achievement, MatchReview, MessageReaction |
+| 3 | `frontend/src/components/ActiveMatch.vue` | Бейджи партнёра + реакции |
+| 4 | `backend/prisma/schema.prisma` | PushSubscription, referralCode в User |
+| 4 | `frontend/public/sw.js` | Service Worker |
+| 4 | `frontend/src/composables/usePushNotifications.ts` | Создать |
+| 5 | `backend/prisma/schema.prisma` | sponsored/lat/lon в QuestTemplate |
+| 5 | `frontend/src/components/admin/AdminPartners.vue` | Создать |

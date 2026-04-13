@@ -16,6 +16,8 @@ import AdminChats from './components/admin/AdminChats.vue';
 import AdminAnalytics from './components/admin/AdminAnalytics.vue';
 import AdminQuests from './components/admin/AdminQuests.vue';
 import AdminVerifications from './components/admin/AdminVerifications.vue';
+import AdminConfig from './components/admin/AdminConfig.vue';
+import AdminPartners from './components/admin/AdminPartners.vue';
 import { API_URL } from './config';
 import { track } from './analytics';
 
@@ -28,6 +30,7 @@ const routes = [
   { path: '/match/:id', component: ActiveMatch },
   { path: '/settings', component: Settings },
   { path: '/history', component: History },
+  { path: '/quest/:id', name: 'PublicQuest', component: () => import('./components/PublicQuestView.vue'), meta: { isPublic: true } },
 
   // ── Админка (отдельная ветка) ───────────────────────────────────────────────
   {
@@ -49,6 +52,8 @@ const routes = [
       { path: 'chats', component: AdminChats, meta: { isAdmin: true } },
       { path: 'analytics', component: AdminAnalytics, meta: { isAdmin: true } },
       { path: 'quests', component: AdminQuests, meta: { isAdmin: true } },
+      { path: 'partners', component: AdminPartners, meta: { isAdmin: true } },
+      { path: 'config', component: AdminConfig, meta: { isAdmin: true } },
     ],
   },
 ];
@@ -65,22 +70,30 @@ router.beforeEach(async (to, _from, next) => {
     // Публичная страница логина в админку
     if (to.meta.isAdminPublic) return next();
 
-    // Проверяем наличие adminToken
+    // Проверяем наличие и срок действия adminToken
     const adminToken = localStorage.getItem('adminToken');
     if (!adminToken) return next('/admin/login');
 
-    // Можно было бы проверить токен на сервере, но для простоты — доверяем localStorage
-    // (Токен подписан отдельным секретом, срок 12ч)
+    try {
+      const payload = JSON.parse(atob(adminToken.split('.')[1]));
+      if (payload.exp * 1000 < Date.now()) {
+        localStorage.removeItem('adminToken');
+        return next('/admin/login');
+      }
+    } catch {
+      localStorage.removeItem('adminToken');
+      return next('/admin/login');
+    }
     return next();
   }
 
   // ── Пользовательские маршруты ──────────────────────────────────────────────
-  const isPublic = to.path === '/';
+  const isPublic = to.path === '/' || to.meta.isPublic;
   const token = localStorage.getItem('token');
 
-  // Если страница публичная (логин)
+  // Если страница публичная (логин или просмотр квеста)
   if (isPublic) {
-    if (token) return next('/dashboard');
+    if (to.path === '/' && token) return next('/dashboard');
     return next();
   }
 

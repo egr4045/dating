@@ -42,12 +42,12 @@
       <table class="admin-table">
         <thead>
           <tr>
-            <th>ID</th>
-            <th>Название</th>
-            <th>Категория</th>
+            <th class="sortable-th" @click="sortBy('id')">ID {{ sortIcon('id') }}</th>
+            <th class="sortable-th" @click="sortBy('title')">Название {{ sortIcon('title') }}</th>
+            <th class="sortable-th" @click="sortBy('category')">Категория {{ sortIcon('category') }}</th>
             <th>Подкатегория</th>
             <th>Цена</th>
-            <th>Лобби</th>
+            <th class="sortable-th" @click="sortBy('lobbies')">Лобби {{ sortIcon('lobbies') }}</th>
             <th style="text-align:right">Действия</th>
           </tr>
         </thead>
@@ -219,17 +219,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { adminFetch } from '../../utils/adminFetch';
 
 const ADMIN_URL = (import.meta as any).env?.VITE_API_URL
   ? (import.meta as any).env.VITE_API_URL
   : (typeof window !== 'undefined' ? window.location.origin + '/api' : '/api');
-
-function apiHeaders() {
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${localStorage.getItem('adminToken')}`,
-  };
-}
 
 // ── State ───────────────────────────────────────────────────────────────────
 const quests = ref<any[]>([]);
@@ -238,9 +232,27 @@ const loading = ref(true);
 const page = ref(1);
 const search = ref('');
 const filterCategory = ref('all');
+const sortField = ref('id');
+const sortDir = ref<'asc' | 'desc'>('desc');
 let searchDebounce: ReturnType<typeof setTimeout> | null = null;
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / 50)));
+
+function sortBy(field: string) {
+  if (sortField.value === field) {
+    sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortField.value = field;
+    sortDir.value = 'asc';
+  }
+  page.value = 1;
+  loadQuests();
+}
+
+function sortIcon(field: string) {
+  if (sortField.value !== field) return '⇅';
+  return sortDir.value === 'asc' ? '↑' : '↓';
+}
 
 const categoryOptions = [
   { value: 'all',     label: '✨ Все' },
@@ -267,10 +279,12 @@ async function loadQuests() {
     const params = new URLSearchParams({
       page: String(page.value),
       limit: '50',
+      sort: sortField.value,
+      dir: sortDir.value,
       ...(search.value ? { search: search.value } : {}),
       ...(filterCategory.value !== 'all' ? { category: filterCategory.value } : {}),
     });
-    const res = await fetch(`${ADMIN_URL}/admin/quests?${params}`, { headers: apiHeaders() });
+    const res = await adminFetch(`${ADMIN_URL}/admin/quests?${params}`);
     const data = await res.json();
     quests.value = data.quests;
     total.value = data.total;
@@ -356,9 +370,8 @@ async function save() {
       : `${ADMIN_URL}/admin/quests`;
     const method = editMode.value ? 'PUT' : 'POST';
 
-    const res = await fetch(url, {
+    const res = await adminFetch(url, {
       method,
-      headers: apiHeaders(),
       body: JSON.stringify(f),
     });
 
@@ -387,9 +400,8 @@ async function doDelete() {
   if (!deleteTarget.value) return;
   deleting.value = true;
   try {
-    const res = await fetch(`${ADMIN_URL}/admin/quests/${deleteTarget.value.id}`, {
+    const res = await adminFetch(`${ADMIN_URL}/admin/quests/${deleteTarget.value.id}`, {
       method: 'DELETE',
-      headers: apiHeaders(),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -435,6 +447,8 @@ async function doDelete() {
 
 /* Table */
 .admin-table-wrap { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 12px; overflow: hidden; }
+.sortable-th { cursor: pointer; user-select: none; white-space: nowrap; }
+.sortable-th:hover { color: #818cf8; }
 .admin-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 .admin-table th {
   padding: 12px 16px; text-align: left; font-size: 0.75rem; font-weight: 700;
