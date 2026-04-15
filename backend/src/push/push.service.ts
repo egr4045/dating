@@ -7,11 +7,18 @@ export class PushService {
   private readonly logger = new Logger(PushService.name);
 
   constructor(private readonly prisma: PrismaService) {
+    const publicKey = process.env.VAPID_PUBLIC_KEY;
+    const privateKey = process.env.VAPID_PRIVATE_KEY;
+    if (!publicKey || !privateKey) {
+      this.logger.error('VAPID_PUBLIC_KEY или VAPID_PRIVATE_KEY не заданы — Web Push отключён.');
+      return;
+    }
     webpush.setVapidDetails(
       process.env.VAPID_SUBJECT || 'mailto:support@meetup.app',
-      process.env.VAPID_PUBLIC_KEY || '',
-      process.env.VAPID_PRIVATE_KEY || '',
+      publicKey,
+      privateKey,
     );
+    this.logger.log('Web Push инициализирован.');
   }
 
   async sendToUser(userId: number, title: string, body: string, url?: string, icon?: string) {

@@ -1,12 +1,16 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { TelegramService } from '../telegram/telegram.service';
+import { PushService } from '../push/push.service';
 
 @Injectable()
 export class AdminService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private telegramService: TelegramService,
+    private pushService: PushService,
   ) {}
 
   // ── Авторизация ────────────────────────────────────────────────────────────
@@ -39,6 +43,7 @@ export class AdminService {
   // ── Пользователи ───────────────────────────────────────────────────────────
 
   async getUsers(search?: string, page = 1, limit = 30, pendingVideo?: boolean) {
+    limit = Math.min(Number(limit) || 30, 100);
     const where: any = search
       ? {
           OR: [
@@ -161,10 +166,17 @@ export class AdminService {
 
   async banUser(userId: number, days: number) {
     const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: { bannedUntil: until }
-    });
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: userId }, data: { bannedUntil: until } }),
+      this.prisma.questLobby.updateMany({
+        where: {
+          status: { in: ['WAITING', 'MATCHED'] },
+          OR: [{ hostId: userId }, { participantId: userId }],
+        },
+        data: { status: 'CANCELLED' },
+      }),
+    ]);
+    return { success: true };
   }
 
   async grantAchievement(userId: number, badgeId: string) {
@@ -173,8 +185,11 @@ export class AdminService {
         data: { userId, badgeId }
       });
       return { success: true };
-    } catch(e) {
-      return { success: false, message: 'Бейдж уже выдан' };
+    } catch (e: any) {
+      if (e?.code === 'P2002') {
+        return { success: false, message: 'Бейдж уже выдан' };
+      }
+      throw e;
     }
   }
 
@@ -307,12 +322,19 @@ export class AdminService {
     return config;
   }
 
+  private readonly ALLOWED_CONFIG_KEYS = new Set([
+    'repCompletedBonus', 'repFailedPenalty', 'repBanThreshold', 'repBanDays',
+  ]);
+
   async updateConfig(newConfig: Record<string, string>) {
     for (const [key, value] of Object.entries(newConfig)) {
+      if (!this.ALLOWED_CONFIG_KEYS.has(key)) continue;
+      const num = parseFloat(value);
+      if (isNaN(num)) continue;
       await this.prisma.appConfig.upsert({
         where: { key },
-        update: { value: String(value) },
-        create: { key, value: String(value) }
+        update: { value: String(num) },
+        create: { key, value: String(num) }
       });
     }
     return { success: true };
@@ -490,5 +512,70 @@ export class AdminService {
       firstName: userMap.get(r.userId as number)?.firstName ?? null,
       username: userMap.get(r.userId as number)?.username ?? null,
     }));
+  }
+
+  // ── Рассылки ───────────────────────────────────────────────────────────────
+
+  private buildTargetWhere(target: 'all' | 'verified' | 'city', city?: string) {
+    if (target === 'verified') return { videoVerified: true };
+    if (target === 'city' && city) return { city };
+    return {};
+  }
+
+  async previewBroadcast(opts: { target?: string; city?: string }) {
+    const target = (opts.target as 'all' | 'verified' | 'city') ?? 'all';
+    const where = this.buildTargetWhere(target, opts.city);
+
+    const [pushCount, telegramCount] = await Promise.all([
+      this.prisma.pushSubscription.count({
+        where: { user: where }
+      }),
+      this.prisma.user.count({
+        where: { telegramId: { not: null }, ...where }
+      }),
+    ]);
+
+    return { pushCount, telegramCount };
+  }
+
+  async sendBroadcastNotification(
+    title: string,
+    body: string,
+    url?: string,
+    targeting: { target: 'all' | 'verified' | 'city'; city?: string } = { target: 'all' },
+    channels: { webPush?: boolean; telegram?: boolean } = { webPush: true, telegram: true },
+  ) {
+    const userWhere = this.buildTargetWhere(targeting.target, targeting.city);
+    const tasks: Promise<any>[] = [];
+
+    let webPushCount = 0;
+    let telegramCount = 0;
+
+    if (channels.webPush !== false) {
+      const subscriptions = await this.prisma.pushSubscription.findMany({
+        where: { user: userWhere },
+        select: { userId: true },
+        distinct: ['userId'],
+      });
+      webPushCount = subscriptions.length;
+      subscriptions.forEach(s => tasks.push(
+        this.pushService.sendToUser(s.userId, title, body, url)
+      ));
+    }
+
+    if (channels.telegram !== false) {
+      const users = await this.prisma.user.findMany({
+        where: { telegramId: { not: null }, ...userWhere },
+        select: { telegramId: true }
+      });
+      telegramCount = users.length;
+      users.forEach(u => tasks.push(
+        this.telegramService.sendMessage(u.telegramId!, `📢 ${title}\n\n${body}${url ? '\n\n🔗 ' + url : ''}`)
+      ));
+    }
+
+    await Promise.allSettled(tasks);
+
+    return { success: true, webPushCount, telegramCount };
   }
 }

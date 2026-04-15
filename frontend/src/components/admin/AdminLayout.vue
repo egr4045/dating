@@ -45,6 +45,7 @@ const navItems = [
   { id: 'chats', path: '/admin/chats',    icon: '💬', label: 'Чаты' },
   { id: 'quests', path: '/admin/quests',   icon: '🃏', label: 'Карточки' },
   { id: 'partners', path: '/admin/partners', icon: '🤝', label: 'Партнёры' },
+  { id: 'notifications', path: '/admin/notifications', icon: '📢', label: 'Рассылки' },
   { id: 'config', path: '/admin/config',   icon: '⚙️', label: 'Настройки' },
   { id: 'analytics', path: '/admin/analytics',icon: '📊', label: 'Аналитика' },
 ];

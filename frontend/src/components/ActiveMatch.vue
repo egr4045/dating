@@ -203,7 +203,7 @@ const route = useRoute();
 const router = useRouter();
 const { error: toastError, success: toastSuccess } = useToast();
 const match = ref<any>(null);
-const currentUserId = parseInt(localStorage.getItem('userId') || '0');
+const currentUserId = parseInt(localStorage.getItem('userId') ?? '') || null;
 const messages = ref<any[]>([]);
 const newMessage = ref('');
 const chatContainer = ref<HTMLElement | null>(null);
@@ -502,12 +502,15 @@ function skipReview() {
   router.push('/dashboard');
 }
 
+const closeReactionPopup = () => { activeReactionMsgId.value = null; };
+
 onMounted(() => {
   loadMatch();
   // Клик мимо попапа реакций закрывает его
-  document.addEventListener('click', () => { activeReactionMsgId.value = null; });
+  document.addEventListener('click', closeReactionPopup);
 });
 onUnmounted(() => {
+  document.removeEventListener('click', closeReactionPopup);
   if (timerInterval) clearInterval(timerInterval);
   if (partnerTypingTimer) clearTimeout(partnerTypingTimer);
   if (typingThrottle) clearTimeout(typingThrottle);

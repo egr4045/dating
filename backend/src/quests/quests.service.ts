@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { ChatGateway } from '../chat/chat.gateway';
@@ -7,6 +7,8 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class QuestsService {
+  private readonly logger = new Logger(QuestsService.name);
+
   constructor(
     private prisma: PrismaService,
     private chatGateway: ChatGateway,
@@ -51,7 +53,7 @@ export class QuestsService {
     }
 
     const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
-    const interests = currentUser.interests.length > 0 ? currentUser.interests : ['_unlikely_interest_'];
+    const interests = (currentUser.interests?.length ?? 0) > 0 ? currentUser.interests : ['_unlikely_interest_'];
     
     const hostConditions = [];
     const prefAgeMin = filters?.ageMin !== undefined ? filters.ageMin : currentUser.prefAgeMin;
@@ -165,11 +167,10 @@ export class QuestsService {
       // Списываем бюджет у использованных спонсоров
       const usedIds = sponsored.slice(0, sIdx).map(s => s.id);
       if (usedIds.length > 0) {
-        await this.prisma.$executeRaw`
-          UPDATE "QuestTemplate"
-          SET "sponsorBudget" = "sponsorBudget" - 1
-          WHERE id = ANY(${usedIds}::text[]) AND "sponsorBudget" > 0
-        `;
+        await this.prisma.questTemplate.updateMany({
+          where: { id: { in: usedIds }, sponsorBudget: { gt: 0 } },
+          data: { sponsorBudget: { decrement: 1 } },
+        });
       }
       return injected;
     }
@@ -207,13 +208,18 @@ export class QuestsService {
 
     const currentUser = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { 
+      select: {
         age: true, gender: true, prefAgeMin: true, prefAgeMax: true, prefGender: true,
+        bannedUntil: true,
         blocksGiven: { select: { blockedId: true } },
         blocksReceived: { select: { blockerId: true } }
       }
     });
     if (!currentUser) return { status: 'error', message: 'User not found' };
+
+    if (currentUser.bannedUntil && new Date(currentUser.bannedUntil) > new Date()) {
+      return { status: 'banned' };
+    }
 
     // Проверяем, существует ли шаблон вообще
     const template = await this.prisma.questTemplate.findUnique({ where: { id: questId } });
@@ -304,29 +310,31 @@ export class QuestsService {
 
       const participant = await this.prisma.user.findUnique({ where: { id: userId } });
       if (participant) {
-        this.notifications.sendTelegramPush(
-          match.host.telegramId,
-          `🎉 Мэтч! ${participant.firstName} тоже хочет "${match.template.title}". Выберите дату!`,
-        );
-        this.notifications.sendTelegramPush(
-          participant.telegramId,
-          `🎉 Мэтч! ${match.host.firstName} тоже хочет "${match.template.title}". Выберите дату!`,
-        );
+        if (match.host.notifyMatch) {
+          this.notifications.sendTelegramPush(
+            match.host.telegramId,
+            `🎉 Мэтч! ${participant.firstName} тоже хочет "${match.template.title}". Выберите дату!`,
+          );
+          this.pushService.sendToUser(
+            match.hostId,
+            'У тебя новый матч! 🌟',
+            `${participant.firstName} тоже хочет пойти на "${match.template.title}"`,
+            `/match/${match.id}/schedule`
+          ).catch(err => this.logger.warn('Web Push failed:', err?.message));
+        }
 
-        // WEB PUSH для обоих
-        this.pushService.sendToUser(
-          match.hostId,
-          'У тебя новый матч! 🌟',
-          `${participant.firstName} тоже хочет пойти на "${match.template.title}"`,
-          `/match/${match.id}/schedule`
-        ).catch(() => {});
-
-        this.pushService.sendToUser(
-          userId,
-          'У тебя новый матч! 🌟',
-          `${match.host.firstName} тоже хочет пойти на "${match.template.title}"`,
-          `/match/${match.id}/schedule`
-        ).catch(() => {});
+        if (participant.notifyMatch) {
+          this.notifications.sendTelegramPush(
+            participant.telegramId,
+            `🎉 Мэтч! ${match.host.firstName} тоже хочет "${match.template.title}". Выберите дату!`,
+          );
+          this.pushService.sendToUser(
+            userId,
+            'У тебя новый матч! 🌟',
+            `${match.host.firstName} тоже хочет пойти на "${match.template.title}"`,
+            `/match/${match.id}/schedule`
+          ).catch(err => this.logger.warn('Web Push failed:', err?.message));
+        }
       }
     }
 
@@ -359,7 +367,7 @@ export class QuestsService {
     // Получаем обновленный мэтч
     const match = await this.prisma.questLobby.findUnique({
       where: { id: lobbyId },
-      include: { host: true, template: true }
+      include: { host: true, participant: true, template: true }
     });
 
     if (!match) return { status: 'error' };
@@ -416,8 +424,8 @@ export class QuestsService {
     return this.prisma.questLobby.findUnique({
       where: { id: matchId },
       include: {
-        host: { include: { photos: { orderBy: { order: 'asc' } }, achievements: true } },
-        participant: { include: { photos: { orderBy: { order: 'asc' } }, achievements: true } },
+        host: { include: { photos: { orderBy: { order: 'asc' } }, achievements: true, timeSlots: { orderBy: { dayOfWeek: 'asc' } } } },
+        participant: { include: { photos: { orderBy: { order: 'asc' } }, achievements: true, timeSlots: { orderBy: { dayOfWeek: 'asc' } } } },
         template: true,
         // Грузим последние 50 сообщений — дальше через /messages?cursor=
         messages: { orderBy: { createdAt: 'desc' }, take: 50, include: { reactions: true } },
@@ -428,7 +436,8 @@ export class QuestsService {
   // Пагинация сообщений через курсор (для подгрузки истории вверх)
   async getMessages(matchId: number, userId: number, cursor?: number) {
     const lobby = await this.prisma.questLobby.findUnique({ where: { id: matchId } });
-    if (!lobby || (lobby.hostId !== userId && lobby.participantId !== userId)) return null;
+    if (!lobby) throw new ForbiddenException('Матч не найден');
+    if (lobby.hostId !== userId && lobby.participantId !== userId) throw new ForbiddenException('Нет доступа');
 
     const messages = await this.prisma.message.findMany({
       where: { matchId },
@@ -474,26 +483,27 @@ export class QuestsService {
     // 2. Обновляем репутацию каждого участника атомарно
     await this.prisma.$transaction(async (tx) => {
       for (const uid of userIds) {
-        const current = await tx.user.findUnique({
-          where: { id: uid },
-          select: { reputation: true, bannedUntil: true, xp: true },
-        });
-        if (!current) continue;
+        if (reputationDelta !== 0 || status === 'COMPLETED') {
+          // Читаем только bannedUntil (нужен для проверки бана)
+          const current = await tx.user.findUnique({
+            where: { id: uid },
+            select: { reputation: true, bannedUntil: true },
+          });
+          if (!current) continue;
 
-        const newReputation = Math.max(0, current.reputation + reputationDelta);
-        const newXp = status === 'COMPLETED' ? current.xp + 100 : current.xp;
+          const newReputation = Math.max(0, current.reputation + reputationDelta);
 
-        await tx.user.update({
-          where: { id: uid },
-          data: {
-            reputation: newReputation,
-            xp: newXp,
-            // Бан: если упала ниже порога и ещё не забанен
-            ...(newReputation < threshold && !current.bannedUntil ? { bannedUntil: banUntil } : {}),
-          },
-        });
+          await tx.user.update({
+            where: { id: uid },
+            data: {
+              reputation: newReputation,
+              ...(status === 'COMPLETED' ? { xp: { increment: 100 } } : {}),
+              ...(newReputation < threshold && !current.bannedUntil ? { bannedUntil: banUntil } : {}),
+            },
+          });
+        }
 
-        // РЕФЕРАЛЬНЫЙ БОНУС
+        // РЕФЕРАЛЬНЫЙ БОНУС (только первое выполнение)
         if (status === 'COMPLETED') {
           const uData = await tx.user.findUnique({ where: { id: uid }, select: { referredById: true } });
           if (uData?.referredById) {
@@ -505,13 +515,10 @@ export class QuestsService {
               }
             });
             if (completedCount === 0) {
-              const referrer = await tx.user.findUnique({ where: { id: uData.referredById }, select: { reputation: true } });
-              if (referrer) {
-                await tx.user.update({
-                  where: { id: uData.referredById },
-                  data: { reputation: referrer.reputation + 0.3 }
-                });
-              }
+              await tx.user.update({
+                where: { id: uData.referredById },
+                data: { reputation: { increment: 0.3 } },
+              });
             }
           }
         }
@@ -519,12 +526,10 @@ export class QuestsService {
     });
 
     if (status === 'COMPLETED') {
-      try {
-        await this.prisma.userAchievement.createMany({
-          data: userIds.map(uid => ({ userId: uid, badgeId: 'FIRST_MATCH' })),
-          skipDuplicates: true,
-        });
-      } catch (e) {}
+      await this.prisma.userAchievement.createMany({
+        data: userIds.map(uid => ({ userId: uid, badgeId: 'FIRST_MATCH' })),
+        skipDuplicates: true,
+      });
     }
 
     return updated;
@@ -534,7 +539,10 @@ export class QuestsService {
 
   async proposeDate(matchId: number, userId: number, proposedDate: Date) {
     const match = await this.prisma.questLobby.findUnique({ where: { id: matchId } });
-    if (!match || match.schedulingStatus === 'CONFIRMED') return null;
+    if (!match) return null;
+    if (match.hostId !== userId && match.participantId !== userId) return null;
+    if (match.status !== 'MATCHED') return null;
+    if (match.schedulingStatus === 'CONFIRMED') return null;
 
     const updated = await this.prisma.questLobby.update({
       where: { id: matchId },
@@ -556,6 +564,10 @@ export class QuestsService {
       include: { host: true, participant: true }
     });
     if (!match) return null;
+    if (match.hostId !== userId && match.participantId !== userId) return null;
+    if (match.status !== 'MATCHED') return null;
+
+    if (accept && !match.proposedDate) return null;
 
     if (accept && match.proposedDate) {
       const updated = await this.prisma.questLobby.update({
@@ -707,28 +719,34 @@ export class QuestsService {
     const targetXpBonus = rating === 5 ? 30 : (rating >= 4 ? 10 : 0);
 
     await this.prisma.$transaction(async (tx) => {
-       const revUser = await tx.user.findUnique({ where: { id: reviewerId }, select: { reputation: true, xp: true } });
-       if (revUser) {
-          await tx.user.update({ where: { id: reviewerId }, data: { reputation: revUser.reputation + reviewerBonus, xp: revUser.xp + reviewerXpBonus } });
-       }
+      await tx.user.update({
+        where: { id: reviewerId },
+        data: {
+          reputation: { increment: reviewerBonus },
+          xp: { increment: reviewerXpBonus },
+        },
+      });
 
-       const tgtUser = await tx.user.findUnique({ where: { id: targetId }, select: { reputation: true, xp: true } });
-       if (tgtUser) {
-          await tx.user.update({ where: { id: targetId }, data: { reputation: tgtUser.reputation + targetBonus, xp: tgtUser.xp + targetXpBonus } });
-       }
+      await tx.user.update({
+        where: { id: targetId },
+        data: {
+          reputation: { increment: targetBonus },
+          xp: { increment: targetXpBonus },
+        },
+      });
 
-       const reviews = await tx.matchReview.aggregate({
-         where: { targetId },
-         _avg: { rating: true },
-         _count: { id: true }
-       });
-       if (reviews._count.id >= 10 && reviews._avg.rating && reviews._avg.rating >= 4.9) {
-          try {
-             await tx.userAchievement.create({
-                data: { userId: targetId, badgeId: 'PERFECT_RATING' }
-             });
-          } catch(e) {}
-       }
+      const reviews = await tx.matchReview.aggregate({
+        where: { targetId },
+        _avg: { rating: true },
+        _count: { id: true },
+      });
+      if (reviews._count.id >= 10 && reviews._avg.rating && reviews._avg.rating >= 4.9) {
+        try {
+          await tx.userAchievement.create({ data: { userId: targetId, badgeId: 'PERFECT_RATING' } });
+        } catch (e: any) {
+          if (e?.code !== 'P2002') throw e;
+        }
+      }
     });
 
     return review;

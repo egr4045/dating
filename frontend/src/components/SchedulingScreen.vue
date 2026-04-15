@@ -46,6 +46,15 @@
         <template v-if="schedulingStatus === 'PENDING' && isHost">
           <h3>📅 Предложи дату и время</h3>
           <p>Выбери, когда вам удобно встретиться</p>
+          <!-- Слоты партнёра как подсказка -->
+          <div v-if="partnerSlots.length > 0" class="partner-slots-hint">
+            <div class="partner-slots-hint__label">⏰ {{ partnerName }} обычно свободен:</div>
+            <div class="partner-slots-hint__items">
+              <span v-for="(slot, i) in partnerSlots" :key="i" class="slot-chip">
+                {{ dayLabels[slot.dayOfWeek] }} {{ slot.timeFrom }}–{{ slot.timeTo }}
+              </span>
+            </div>
+          </div>
           <div class="field-group">
             <label class="input-label">Дата и время</label>
             <DateTimePicker v-model="proposedDateInput" :min="minDatetime" />
@@ -82,6 +91,15 @@
             <!-- Партнёр предложил — мне надо ответить -->
             <h3>{{ partnerName }} предлагает встречу</h3>
             <div class="proposed-date-badge big">📅 {{ formatDate(match?.proposedDate) }}</div>
+            <!-- Слоты партнёра как подсказка -->
+            <div v-if="partnerSlots.length > 0" class="partner-slots-hint" style="margin-top:8px">
+              <div class="partner-slots-hint__label">⏰ Слоты {{ partnerName }}:</div>
+              <div class="partner-slots-hint__items">
+                <span v-for="(slot, i) in partnerSlots" :key="i" class="slot-chip">
+                  {{ dayLabels[slot.dayOfWeek] }} {{ slot.timeFrom }}–{{ slot.timeTo }}
+                </span>
+              </div>
+            </div>
             <div class="date-actions">
               <button class="btn btn-success btn-full" :disabled="submitting" @click="confirmDate(true)">
                 ✅ Подходит!
@@ -145,6 +163,9 @@ const isHost = computed(() => match.value?.hostId === currentUserId);
 const partner = computed(() => isHost.value ? match.value?.participant : match.value?.host);
 const partnerName = computed(() => partner.value?.firstName ?? '...');
 const partnerInitial = computed(() => partnerName.value[0]?.toUpperCase() ?? '?');
+
+const dayLabels = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const partnerSlots = computed(() => partner.value?.timeSlots ?? []);
 
 const bannerStyle = computed(() => {
   const img = match.value?.template?.imageUrl;
@@ -316,6 +337,33 @@ onUnmounted(() => { socket?.disconnect(); });
 }
 
 .field-group { display: flex; flex-direction: column; gap: 8px; }
+
+.partner-slots-hint {
+  background: var(--primary-soft, #eef2ff);
+  border-radius: var(--radius-sm, 10px);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.partner-slots-hint__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary, #4a6fff);
+}
+.partner-slots-hint__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.slot-chip {
+  background: var(--primary, #4a6fff);
+  color: #fff;
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
 
 .error-banner {
   background: var(--danger-soft, #fde8e8);

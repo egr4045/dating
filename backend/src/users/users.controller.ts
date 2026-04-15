@@ -1,4 +1,4 @@
-import { Controller, Post, Patch, Get, Delete, Body, Param, UseGuards, Request, ForbiddenException, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Post, Patch, Get, Delete, Body, Param, UseGuards, Request, ForbiddenException, UseInterceptors, UploadedFile, Query } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -111,11 +111,17 @@ export class UsersController {
     return this.usersService.blockUser(req.user.id, parseInt(blockedId));
   }
 
-  @Post('referral/apply')
+  @Post('apply-referral')
   @UseGuards(JwtAuthGuard)
   async applyReferral(@Request() req: any, @Body('code') code: string) {
     if (!code) throw new ForbiddenException('Код не указан');
     return this.usersService.applyReferralCode(req.user.id, code);
+  }
+
+  @Patch('notification-prefs')
+  @UseGuards(JwtAuthGuard)
+  async updateNotificationPrefs(@Request() req: any, @Body() body: { notifyMatch?: boolean; notifyMessage?: boolean }) {
+    return this.usersService.updateNotificationPrefs(req.user.id, body);
   }
 
   @Post('push-subscription')

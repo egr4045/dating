@@ -201,18 +201,23 @@ function openReviewDialog(matchId: number) {
 }
 
 async function submitReview() {
-  if (!reviewMatchId.value) return;
+  if (!reviewMatchId.value || reviewRating.value === 0) return;
   const token = localStorage.getItem('token');
   try {
-    await fetch(`${API_URL}/quests/match/${reviewMatchId.value}/review`, {
+    const res = await fetch(`${API_URL}/quests/match/${reviewMatchId.value}/review`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ rating: reviewRating.value, comment: reviewComment.value }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.message || 'Не удалось отправить отзыв');
+      return;
+    }
     showReviewDialog.value = false;
     loadData();
-  } catch (e) {
-    console.warn(e);
+  } catch {
+    alert('Нет соединения');
   }
 }
 

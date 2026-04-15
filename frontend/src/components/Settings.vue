@@ -221,16 +221,48 @@
         </button>
       </div>
 
-      <!-- Push-уведомления -->
-      <div v-if="pushSupported" class="card" style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
-        <div>
-          <div style="font-weight:700">Уведомления 🔔</div>
-          <div class="text-xs text-muted">{{ pushSubscribed ? 'Включены — не пропустишь матч' : 'Узнавай о новых матчах' }}</div>
+      <!-- Уведомления -->
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="section-label">🔔 Уведомления</div>
+
+        <!-- Web Push подписка -->
+        <div v-if="pushSupported" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div>
+            <div style="font-weight:600; font-size:14px;">Web Push</div>
+            <div class="text-xs text-muted">{{ pushSubscribed ? 'Включены' : 'Узнавай о матчах и сообщениях' }}</div>
+          </div>
+          <div class="theme-switch">
+            <input type="checkbox" id="pushSwitch" :checked="pushSubscribed" @change="togglePush" :disabled="pushLoading" />
+            <label for="pushSwitch" class="switch-ui"></label>
+          </div>
         </div>
-        <div class="theme-switch">
-          <input type="checkbox" id="pushSwitch" :checked="pushSubscribed" @change="togglePush" :disabled="pushLoading" />
-          <label for="pushSwitch" class="switch-ui"></label>
+
+        <!-- Гранулярные настройки -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <div>
+            <div style="font-weight:600; font-size:14px;">Новый матч</div>
+            <div class="text-xs text-muted">Push + Telegram при новом совпадении</div>
+          </div>
+          <div class="theme-switch">
+            <input type="checkbox" id="notifyMatchSwitch" v-model="notifyMatch" />
+            <label for="notifyMatchSwitch" class="switch-ui"></label>
+          </div>
         </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+          <div>
+            <div style="font-weight:600; font-size:14px;">Новое сообщение</div>
+            <div class="text-xs text-muted">Push + Telegram при входящем сообщении</div>
+          </div>
+          <div class="theme-switch">
+            <input type="checkbox" id="notifyMessageSwitch" v-model="notifyMessage" />
+            <label for="notifyMessageSwitch" class="switch-ui"></label>
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-full btn-sm" @click="saveNotificationPrefs" :disabled="savingNotifPrefs">
+          {{ savingNotifPrefs ? 'Сохранение...' : 'Сохранить' }}
+        </button>
       </div>
 
       <!-- Темная тема -->
@@ -289,6 +321,9 @@ const loading = ref(true);
 const savingInterests = ref(false);
 const savingPrefs = ref(false);
 const savingSlots = ref(false);
+const savingNotifPrefs = ref(false);
+const notifyMatch = ref(true);
+const notifyMessage = ref(true);
 const profile = ref<any>(null);
 const selectedInterests = ref<string[]>([]);
 const prefGender = ref('any');
@@ -389,9 +424,12 @@ async function loadProfile() {
   if (!token) return;
   try {
     const res = await fetch(`${API_URL}/users/me`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) { loading.value = false; return; }
     profile.value = await res.json();
     selectedInterests.value = [...(profile.value.interests ?? [])];
     prefGender.value = profile.value.prefGender ?? 'any';
+    notifyMatch.value = profile.value.notifyMatch ?? true;
+    notifyMessage.value = profile.value.notifyMessage ?? true;
     if (profile.value.timeSlots) {
       profile.value.timeSlots.forEach((s: any) => {
         const d = daysConfig.value.find(day => day.val === s.dayOfWeek);
@@ -476,6 +514,28 @@ async function saveSlots() {
     showToast('Нет соединения', 'error');
   } finally {
     savingSlots.value = false;
+  }
+}
+
+async function saveNotificationPrefs() {
+  const token = localStorage.getItem('token');
+  if (!token) return;
+  savingNotifPrefs.value = true;
+  try {
+    const res = await fetch(`${API_URL}/users/notification-prefs`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ notifyMatch: notifyMatch.value, notifyMessage: notifyMessage.value }),
+    });
+    if (res.ok) {
+      showToast('✅ Настройки уведомлений сохранены');
+    } else {
+      showToast('Ошибка сохранения', 'error');
+    }
+  } catch {
+    showToast('Нет соединения', 'error');
+  } finally {
+    savingNotifPrefs.value = false;
   }
 }
 

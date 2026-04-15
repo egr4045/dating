@@ -18,6 +18,7 @@ import AdminQuests from './components/admin/AdminQuests.vue';
 import AdminVerifications from './components/admin/AdminVerifications.vue';
 import AdminConfig from './components/admin/AdminConfig.vue';
 import AdminPartners from './components/admin/AdminPartners.vue';
+import AdminNotifications from './components/admin/AdminNotifications.vue';
 import { API_URL } from './config';
 import { track } from './analytics';
 
@@ -54,6 +55,7 @@ const routes = [
       { path: 'quests', component: AdminQuests, meta: { isAdmin: true } },
       { path: 'partners', component: AdminPartners, meta: { isAdmin: true } },
       { path: 'config', component: AdminConfig, meta: { isAdmin: true } },
+      { path: 'notifications', component: AdminNotifications, meta: { isAdmin: true } },
     ],
   },
 ];

@@ -77,8 +77,7 @@ export class UsersService {
         xp += 5; // Бонус за стрик
         needsUpdate = true;
       } else if (diffDays > 1) {
-        streakDays = 1; // Пропуск - сброс до 1
-        xp += 5;
+        streakDays = 1; // Пропуск — сброс до 1, XP не даётся
         needsUpdate = true;
       } else if (now.getTime() - last.getTime() > 1000 * 60 * 60 * 4) {
         // Просто обновить дату если прошло больше 4 часов и это тот же день
@@ -137,6 +136,8 @@ export class UsersService {
         maxStreak: true,
         referralCode: true,
         referredById: true,
+        notifyMatch: true,
+        notifyMessage: true,
       },
     });
 
@@ -301,10 +302,18 @@ export class UsersService {
         await this.prisma.userAchievement.create({
           data: { userId, badgeId: 'FULL_PROFILE' }
         });
-      } catch (e) {
-        // Игнорируем ошибку уникальности
+      } catch (e: any) {
+        if (e?.code !== 'P2002') throw e;
       }
     }
+  }
+
+  async updateNotificationPrefs(userId: number, prefs: { notifyMatch?: boolean; notifyMessage?: boolean }) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: prefs,
+      select: { notifyMatch: true, notifyMessage: true },
+    });
   }
 
   async savePushSubscription(userId: number, subscription: any) {

@@ -60,8 +60,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('joinRoom')
   async handleJoinRoom(@ConnectedSocket() client: Socket, @MessageBody() matchId: number) {
     const userId = client.data.userId;
+    if (!userId) return;
     const lobby = await this.prisma.questLobby.findUnique({ where: { id: matchId } });
-    if (lobby && (lobby.hostId === userId || lobby.participantId === userId)) {
+    if (lobby && lobby.status === 'MATCHED' && (lobby.hostId === userId || lobby.participantId === userId)) {
       client.join(`match_${matchId}`);
     }
   }
@@ -139,13 +140,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Отправка Push-уведомления получателю
     const recipientId = isHost ? lobby.participantId : lobby.hostId;
     if (recipientId) {
-      const sender = await this.prisma.user.findUnique({ where: { id: senderId }, select: { firstName: true } });
-      this.pushService.sendToUser(
-        recipientId,
-        `Новое сообщение от ${sender?.firstName || 'Пользователя'}`,
-        text.length > 50 ? text.slice(0, 47) + '...' : text,
-        `/match/${data.matchId}`
-      ).catch(err => console.error('Push notification failed', err));
+      const [sender, recipient] = await Promise.all([
+        this.prisma.user.findUnique({ where: { id: senderId }, select: { firstName: true } }),
+        this.prisma.user.findUnique({ where: { id: recipientId }, select: { notifyMessage: true } }),
+      ]);
+      if (recipient?.notifyMessage) {
+        this.pushService.sendToUser(
+          recipientId,
+          `Новое сообщение от ${sender?.firstName || 'Пользователя'}`,
+          text.length > 50 ? text.slice(0, 47) + '...' : text,
+          `/match/${data.matchId}`
+        ).catch(err => console.error('Push notification failed', err));
+      }
     }
 
     return message;

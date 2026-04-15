@@ -55,7 +55,11 @@ export class AdminController {
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { days: number },
   ) {
-    return this.adminService.banUser(id, body.days);
+    const days = Number(body.days);
+    if (!Number.isFinite(days) || days < 1 || days > 3650) {
+      throw new BadRequestException('days должен быть от 1 до 3650');
+    }
+    return this.adminService.banUser(id, days);
   }
 
   @Delete('users/:id')
@@ -174,6 +178,11 @@ export class AdminController {
       meta?: any;
     },
   ) {
+    if (!body.event || typeof body.event !== 'string' || body.event.length > 100) return { ok: false };
+    if (!body.sessionId || typeof body.sessionId !== 'string' || body.sessionId.length > 100) return { ok: false };
+    // Ограничиваем размер meta чтобы предотвратить DoS
+    const metaStr = body.meta ? JSON.stringify(body.meta) : '{}';
+    if (metaStr.length > 2048) return { ok: false };
     return this.adminService.trackEvent(
       body.userId ?? null,
       body.sessionId,
@@ -220,5 +229,39 @@ export class AdminController {
     const fromDate = from ? new Date(from) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const toDate = to ? new Date(to) : new Date();
     return this.adminService.getTopUsers(fromDate, toDate);
+  }
+
+  // ── Рассылки ───────────────────────────────────────────────────────────────
+
+  @Get('notifications/preview')
+  @UseGuards(AdminAuthGuard)
+  async previewBroadcast(@Query('target') target?: string, @Query('city') city?: string) {
+    return this.adminService.previewBroadcast({ target, city });
+  }
+
+  @Post('notifications/broadcast')
+  @UseGuards(AdminAuthGuard)
+  async sendBroadcast(@Body() body: {
+    title: string;
+    body: string;
+    url?: string;
+    target?: 'all' | 'verified' | 'city';
+    city?: string;
+    channels?: { webPush?: boolean; telegram?: boolean };
+  }) {
+    if (!body.title || !body.body) {
+      throw new BadRequestException('Поля title и body обязательны');
+    }
+    // Запрещаем javascript: и data: URL
+    if (body.url && /^(javascript|data):/i.test(body.url.trim())) {
+      throw new BadRequestException('Недопустимый URL');
+    }
+    return this.adminService.sendBroadcastNotification(
+      body.title,
+      body.body,
+      body.url,
+      { target: body.target ?? 'all', city: body.city },
+      body.channels ?? { webPush: true, telegram: true },
+    );
   }
 }

@@ -62,7 +62,11 @@ model User {
   achievements      UserAchievement[]
   reactionsGiven    MessageReaction[]
   pushSubscriptions PushSubscription[]
-  
+
+  // Настройки уведомлений
+  notifyMatch     Boolean  @default(true)
+  notifyMessage   Boolean  @default(true)
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

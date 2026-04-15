@@ -385,6 +385,17 @@ function onNope(questId: string) {
   setTimeout(() => {
     quests.value = quests.value.filter(q => q.id !== questId);
   }, 500);
+
+  // Сохраняем дизлайк на сервере
+  const token = localStorage.getItem('token');
+  if (token) {
+    fetch(`${API_URL}/quests/swipe`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ questId, action: 'dislike' }),
+    }).catch(() => {});
+  }
+
   if (quest) {
     lastNopedQuest.value = quest;
     showUndo.value = true;
@@ -429,7 +440,10 @@ onMounted(() => {
   connectSocket();
 });
 
-onUnmounted(() => { socket?.disconnect(); });
+onUnmounted(() => {
+  socket?.disconnect();
+  if (undoTimer) clearTimeout(undoTimer);
+});
 </script>
 
 <style scoped>

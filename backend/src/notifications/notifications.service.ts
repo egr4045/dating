@@ -1,24 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { TelegramService } from '../telegram/telegram.service';
 
 @Injectable()
 export class NotificationsService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(NotificationsService.name);
 
-  async sendTelegramPush(telegramId: string, text: string) {
-    const token = process.env.TELEGRAM_BOT_TOKEN;
-    if (!token || !telegramId || telegramId.startsWith('test-')) return;
+  constructor(
+    private prisma: PrismaService,
+    private telegramService: TelegramService,
+  ) {}
 
-    try {
-      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: telegramId, text }),
-      });
-    } catch (e) {
-      console.error('Ошибка ТГ-пуша:', e);
-    }
+  async sendTelegramPush(telegramId: string | null | undefined, text: string) {
+    if (!telegramId) return;
+    await this.telegramService.sendMessage(telegramId, text);
   }
 
   @Cron(CronExpression.EVERY_30_SECONDS)
@@ -37,7 +33,7 @@ export class NotificationsService {
       const lastMsg = lobby.lastMessageAt;
 
       // Хост не читал чат после последнего сообщения?
-      if (lastMsg > lobby.hostLastReadAt && lastMsg > lobby.hostNotifiedAt) {
+      if (lastMsg > lobby.hostLastReadAt && lastMsg > lobby.hostNotifiedAt && lobby.host.notifyMessage) {
         // Атомарно помечаем «уведомлён» ДО отправки пуша.
         // Если count=0 — параллельный крон уже обработал, пропускаем.
         const marked = await this.prisma.questLobby.updateMany({
@@ -53,7 +49,7 @@ export class NotificationsService {
       }
 
       // Напарник не читал чат после последнего сообщения?
-      if (lastMsg > lobby.participantLastReadAt && lastMsg > lobby.participantNotifiedAt) {
+      if (lastMsg > lobby.participantLastReadAt && lastMsg > lobby.participantNotifiedAt && lobby.participant.notifyMessage) {
         const marked = await this.prisma.questLobby.updateMany({
           where: { id: lobby.id, participantNotifiedAt: { lt: lastMsg } },
           data: { participantNotifiedAt: now },

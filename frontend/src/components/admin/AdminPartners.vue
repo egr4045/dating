@@ -237,7 +237,7 @@ async function savePartnerMeta() {
   try {
     if (editingPartner.value) {
       // Обновляем sponsorName/sponsorLogo у всех квестов этого партнёра
-      await Promise.all(
+      const results = await Promise.allSettled(
         editingPartner.value.quests.map(q =>
           adminFetch(`${API_URL}/admin/quests/${q.id}`, {
             method: 'PUT',
@@ -248,7 +248,8 @@ async function savePartnerMeta() {
           })
         )
       );
-      toastOk('Партнёр обновлён');
+      const failed = results.filter(r => r.status === 'rejected').length;
+      toastOk(failed > 0 ? `Обновлено с ошибками (${failed} из ${results.length} не сохранились)` : 'Партнёр обновлён');
       showNewPartnerModal.value = false;
       await loadSponsored();
     } else {

@@ -10,6 +10,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AdminModule } from './admin/admin.module';
 import { PushModule } from './push/push.module';
+import { TelegramModule } from './telegram/telegram.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { PushModule } from './push/push.module';
     PrismaModule,
     AdminModule,
     PushModule,
+    TelegramModule,
   ],
   providers: [
     {
